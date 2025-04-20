@@ -31,6 +31,10 @@ union fdctl_args {
   } monitor;
 
   struct {
+    ulong polling_rate_ms;
+  } fdtop;
+
+  struct {
     int                      command;
     struct configure_stage * stages[ CONFIGURE_STAGE_COUNT ];
   } configure;
