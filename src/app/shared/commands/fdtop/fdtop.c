@@ -1,8 +1,8 @@
-
+#include <semaphore.h>
 #include <errno.h>
 #include "../../../../disco/metrics/fd_metrics.h"
 #include "../../../../disco/topo/fd_topo.h"
-#include <cstdlib>
+/*#include <cstdlib>*/
 #include <linux/capability.h>
 #include <signal.h>
 #include <sys/resource.h>
@@ -11,6 +11,9 @@
 #include "../../fd_cap_chk.h"
 #include "../../../../util/log/fd_log.h"
 #include "../../../../flamenco//leaders/fd_leaders.h"
+
+/* TODO: Arbitrary number*/
+#define MAX_TERMINAL_BUFFER_SIZE 32000
 
 typedef struct {
   ulong polling_rate_ms;
@@ -52,7 +55,9 @@ typedef struct {
    ulong net_in_rx_cnt;
    ulong net_out_tx_cnt;
   } stats;
-
+  struct {
+   ulong txn_success;
+  } bank;
   struct {
     
    int page_number;
@@ -113,8 +118,40 @@ monitor_cmd_fn( args_t * args,
    FD_LOG_ERR(( "sigaction(SIGTERM) failed (%i-%s)", errno, fd_io_strerror( errno ) ));
  }
 
+ sem_t metrics_sem;
+ sem_t display_sem;
+
+ if( FD_UNLIKELY( -1==sem_init( &metrics_sem, 0, 0 ) ) ){
+   FD_LOG_ERR(( "sem_init(metrics_sem) failed (%i-%s)", errno, fd_io_strerror( errno ) ));
+ }
+
+ if( FD_UNLIKELY( -1==sem_init( &display_sem, 0, 0 ) ) ){
+   FD_LOG_ERR(( "sem_init(metrics_sem) failed (%i-%s)", errno, fd_io_strerror( errno ) ));
+ }
+ 
+ char buffer1[MAX_TERMINAL_BUFFER_SIZE];
+ char buffer2[MAX_TERMINAL_BUFFER_SIZE];
+ 
+ typedef struct fd_top_t app;
 
 }
+
+void
+poll_metrics( fd_top_t * const app, fd_topo_t const * topo ){
+  ulong bank_tile_cnt = fd_topo_tile_name_cnt( topo, "bank" );
+  for( ulong i = 0; i<bank_tile_cnt; i++ ){
+        ulong tile_idx = fd_topo_find_tile( topo, "bank", i);
+        fd_topo_tile_t const * bank = &topo->tiles[tile_idx];
+        volatile ulong * bank_metrics = fd_metrics_tile( bank->metrics );
+        ulong bank_txn_success = bank_metrics[ MIDX(COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ];
+        FD_LOG_DEBUG(( "bank_txn_success: %lu", bank_txn_success ));
+        app->bank.txn_success = bank_txn_success;
+  }
+
+}
+
+
+
 
 
 
