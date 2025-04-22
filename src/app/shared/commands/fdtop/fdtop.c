@@ -1,7 +1,10 @@
 
+#include <errno.h>
 #include "../../../../disco/metrics/fd_metrics.h"
 #include "../../../../disco/topo/fd_topo.h"
+#include <cstdlib>
 #include <linux/capability.h>
+#include <signal.h>
 #include <sys/resource.h>
 #include <unistd.h>
 #include "../../fd_config.h"
@@ -89,3 +92,43 @@ fdtop_cmd_args( int *    argc,
                 args_t * args ) {
  args->fdtop.polling_rate_ms = fd_env_strip_cmdline_ulong( argc, argv, "--poll_ms", NULL, 100);
 }
+
+static void signal1( int sig ){
+  /* Supress warning and exit. */
+  (void)sig;
+  exit( 0 );
+} 
+
+struct sigaction sa = {
+  .sa_handler = signal1
+};
+
+void
+monitor_cmd_fn( args_t * args,
+                config_t * config ) {
+ if( FD_UNLIKELY( sigaction( SIGINT, &sa, NULL ) ) ){
+   FD_LOG_ERR(( "sigaction(SIGINT) failed (%i-%s)", errno, fd_io_strerror( errno ) ));
+ } 
+ if( FD_UNLIKELY( sigaction( SIGTERM, &sa, NULL ) ) ){
+   FD_LOG_ERR(( "sigaction(SIGTERM) failed (%i-%s)", errno, fd_io_strerror( errno ) ));
+ }
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
