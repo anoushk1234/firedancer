@@ -7,6 +7,7 @@
 #include "../shared/commands/configure/configure.h"
 #include "../shared/commands/run/run.h"
 #include "../shared/commands/monitor/monitor.h"
+#include "../shared/commands/fdtop/fdtop.h"
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -19,6 +20,7 @@ action_t ACTIONS[] = {
 #endif
   { .name = "configure",    .args = configure_cmd_args,    .fn = configure_cmd_fn,    .perm = configure_cmd_perm,    .description = "Configure the local host so it can run Firedancer correctly" },
   { .name = "monitor",      .args = monitor_cmd_args,      .fn = monitor_cmd_fn,      .perm = monitor_cmd_perm,      .description = "Monitor a locally running Firedancer instance with a terminal GUI" },
+  { .name = "fdtop",      .args = fdtop_cmd_args,      .fn= fdtop_cmd_fn,      .perm = fdtop_cmd_perm,      .description = "Monitor a locally running Firedancer instance with a terminal GUI" },
   { .name = "keys",         .args = keys_cmd_args,         .fn = keys_cmd_fn,         .perm = NULL,                  .description = "Generate new keypairs for use with the validator or print a public key" },
   { .name = "ready",        .args = NULL,                  .fn = ready_cmd_fn,        .perm = NULL,                  .description = "Wait for all tiles to be running" },
   { .name = "mem",          .args = NULL,                  .fn = mem_cmd_fn,          .perm = NULL,                  .description = "Print workspace memory and tile topology information" },

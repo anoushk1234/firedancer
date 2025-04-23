@@ -5,69 +5,17 @@
 /*#include <cstdlib>*/
 #include <linux/capability.h>
 #include <signal.h>
+#include <string.h>
 #include <sys/resource.h>
 #include <unistd.h>
 #include "../../fd_config.h"
 #include "../../fd_cap_chk.h"
 #include "../../../../util/log/fd_log.h"
-#include "../../../../flamenco//leaders/fd_leaders.h"
+#include "./fdtop.h"
 
 /* TODO: Arbitrary number*/
 #define MAX_TERMINAL_BUFFER_SIZE 32000
 
-typedef struct {
-  ulong polling_rate_ms;
-
-  fd_pubkey_t identity_key;
-  char identity_key_base58[ FD_BASE58_ENCODED_32_SZ ];
-  ulong next_leader_slot;
-  ulong current_slot;
-  
-  struct {
-    ulong epoch;
-    ulong tsstart;
-    ulong tsend;
-
-    ulong my_total_slots;
-    ulong my_skipped_slots;
-    
-    ulong epoch_total_stake;
-    ulong my_total_stake;
-    fd_epoch_leaders_t * leader_sched;
-  } epoch;
-
-  struct {
-    fd_pubkey_t vote_account [ 1 ];
-    ulong last_vote;
-    ulong epoch_credits;
-
-    /* The vote credit data for last 32 slots. 
-       TODO: Change this to a better number. */
-    ulong tvc_historical [ 32 ];
-    int delinquent;
-  } vote_info;
-
-  struct {
-   ulong gossip_in_bytes;
-   ulong gossip_out_bytes;
-
-   ulong quic_conn_cnt;
-   ulong net_in_rx_cnt;
-   ulong net_out_tx_cnt;
-  } stats;
-  struct {
-   ulong txn_success;
-  } bank;
-  struct {
-    
-   int page_number;
-
-   /* An integer where the first eight bits signify if the corresponding
-     monitor at the respective index is enabled or disabled. */
-   int monitors;
-  } app_state;
-
-} fd_top_t;
 
 void
 fdtop_cmd_perm( args_t *         args FD_PARAM_UNUSED,
@@ -109,6 +57,20 @@ struct sigaction sa = {
 };
 
 void
+poll_metrics( fd_top_t * const app, fd_topo_t const * topo ){
+  ulong bank_tile_cnt = fd_topo_tile_name_cnt( topo, "bank" );
+  for( ulong i = 0; i<bank_tile_cnt; i++ ){
+        ulong tile_idx = fd_topo_find_tile( topo, "bank", i);
+        fd_topo_tile_t const * bank = &topo->tiles[tile_idx];
+        volatile ulong * bank_metrics = fd_metrics_tile( bank->metrics );
+        ulong bank_txn_success = bank_metrics[ MIDX(COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ];
+        FD_LOG_DEBUG(( "bank_txn_success: %lu", bank_txn_success ));
+        app->bank.txn_success = bank_txn_success;
+  }
+
+}
+
+void
 monitor_cmd_fn( args_t * args,
                 config_t * config ) {
  if( FD_UNLIKELY( sigaction( SIGINT, &sa, NULL ) ) ){
@@ -132,23 +94,13 @@ monitor_cmd_fn( args_t * args,
  char buffer1[MAX_TERMINAL_BUFFER_SIZE];
  char buffer2[MAX_TERMINAL_BUFFER_SIZE];
  
- typedef struct fd_top_t app;
+ fd_top_t app;
+ memset( &app, 0, sizeof(app) );
+ poll_metrics(&app, &config->topo); 
 
+ 
 }
 
-void
-poll_metrics( fd_top_t * const app, fd_topo_t const * topo ){
-  ulong bank_tile_cnt = fd_topo_tile_name_cnt( topo, "bank" );
-  for( ulong i = 0; i<bank_tile_cnt; i++ ){
-        ulong tile_idx = fd_topo_find_tile( topo, "bank", i);
-        fd_topo_tile_t const * bank = &topo->tiles[tile_idx];
-        volatile ulong * bank_metrics = fd_metrics_tile( bank->metrics );
-        ulong bank_txn_success = bank_metrics[ MIDX(COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ];
-        FD_LOG_DEBUG(( "bank_txn_success: %lu", bank_txn_success ));
-        app->bank.txn_success = bank_txn_success;
-  }
-
-}
 
 
 
