@@ -62,7 +62,7 @@ typedef struct {
 
 void fdtop_cmd_fn( args_t * args, config_t * config );
 void fdtop_cmd_args( int * argc, char *** argv, args_t * args );
-void fdtop_cmd_perm( args_t * args FD_PARAM_UNUSED, fd_cap_chk_t * chk, config_t const * config );
+void fdtop_cmd_perm( args_t * args, fd_cap_chk_t * chk, config_t const * config );
 
 
 #endif /* HEADER_fd_src_app_shared_commands_fdtop_h */
