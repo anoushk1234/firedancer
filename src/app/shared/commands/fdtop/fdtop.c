@@ -8,10 +8,12 @@
 #include <string.h>
 #include <sys/resource.h>
 #include <unistd.h>
+/*#include <notcurses/notcurses.h>*/
 #include "../../fd_config.h"
 #include "../../fd_cap_chk.h"
 #include "../../../../util/log/fd_log.h"
 #include "fdtop.h"
+#include "box.h"
 
 /* TODO: Arbitrary number*/
 #define MAX_TERMINAL_BUFFER_SIZE 32000
@@ -64,11 +66,44 @@ poll_metrics( fd_top_t * const app, fd_topo_t const * topo ){
         fd_topo_tile_t const * bank = &topo->tiles[ tile_idx ];
         volatile ulong const * bank_metrics = fd_metrics_tile( bank->metrics );
         ulong bank_txn_success = bank_metrics[ MIDX( COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ];
-        FD_LOG_ERR(( "bank_txn_success: %lu", bank_txn_success ));
+        FD_LOG_INFO(( "bank_txn: %lu", bank_txn_success ));
         app->bank.txn_success = bank_txn_success;
   }
 
 }
+
+/*static const unsigned MINROWS = 24;*/
+/*static const unsigned MINCOLS = 76;*/
+
+void
+draw_monitor( fd_top_t const * app ){
+  struct notcurses* nc;
+  notcurses_options nopts = { 0 };
+  nc = notcurses_init( &nopts, NULL );
+  if( FD_UNLIKELY( NULL==nc ) ){
+        FD_LOG_ERR(( "notcurses_init() failed" )); 
+  }
+  unsigned dimx, dimy;
+  ncplane_dim_yx( notcurses_stdplane( nc ) , &dimy, &dimx );
+
+  notcurses_drop_planes( nc );
+  notcurses_stats_reset(nc, NULL);
+  
+  struct ncplane* n = notcurses_stdplane(nc);
+  uint64_t channels = 0;
+  ncchannels_set_fg_rgb(&channels, 0); // explicit black + opaque
+  ncchannels_set_bg_rgb(&channels, 0);
+  if(ncplane_set_base(n, "", 0, channels)){
+    FD_LOG_ERR(( "-1" ));
+  }
+  ncplane_erase(n);
+  hud_create(nc);
+  hud_schedule( "hellodbhbydvetyvdev", 0); 
+   notcurses_render( nc ); 
+   notcurses_stop( nc );
+}
+
+
 
 void
 fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
@@ -88,7 +123,7 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
  }
 
  if( FD_UNLIKELY( -1==sem_init( &display_sem, 0, 0 ) ) ){
-   FD_LOG_ERR(( "sem_init(metrics_sem) failed (%i-%s)", errno, fd_io_strerror( errno ) ));
+   FD_LOG_ERR(( "sem_init(display_sem) lfailed (%i-%s)", errno, fd_io_strerror( errno ) ));
  }
  
  /*char buffer1[MAX_TERMINAL_BUFFER_SIZE];*/
@@ -100,26 +135,7 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
  memset( &app, 0, sizeof(app) );
  poll_metrics(&app, &config->topo); 
 
- 
+ draw_monitor(&app); 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

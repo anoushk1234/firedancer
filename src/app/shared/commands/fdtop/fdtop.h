@@ -1,10 +1,10 @@
 #ifndef HEADER_fd_src_app_shared_commands_fdtop_h
 #define HEADER_fd_src_app_shared_commands_fdtop_h
-
 #include "../../fd_config.h"
 /*#include "../../../../util/fd_util.h"*/
 #include "../../../../flamenco/leaders/fd_leaders.h"
 
+#include <notcurses/notcurses.h>
 /*TODO: Check if this is aligned by the compiler, if not align manually.*/
 typedef struct {
   ulong polling_rate_ms;
@@ -63,6 +63,6 @@ typedef struct {
 void fdtop_cmd_fn( args_t * args, config_t * config );
 void fdtop_cmd_args( int * argc, char *** argv, args_t * args );
 void fdtop_cmd_perm( args_t * args, fd_cap_chk_t * chk, config_t const * config );
-
+void draw_monitor( fd_top_t const * app );
 
 #endif /* HEADER_fd_src_app_shared_commands_fdtop_h */
