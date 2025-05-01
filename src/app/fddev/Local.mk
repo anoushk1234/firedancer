@@ -42,6 +42,8 @@ endif
 
 monitor: bin
 	$(OBJDIR)/bin/fddev monitor $(MONITOR_ARGS)
+fdtop: bin
+	$(OBJDIR)/bin/fddev fdtop $(MONITOR_ARGS)
 
 ifdef FD_HAS_NO_AGAVE
 ifdef FD_HAS_SECP256K1

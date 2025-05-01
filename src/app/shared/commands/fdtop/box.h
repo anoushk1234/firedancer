@@ -1,4 +1,5 @@
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <notcurses/notcurses.h>
@@ -22,8 +23,8 @@ hud_refresh(struct ncplane* n);
 struct ncplane*
 hud_create(struct notcurses* nc);
 
-static int
+int
 hud_print_finished(elem* list);
 
 
-int hud_schedule(const char* demoname, uint startns);
+int hud_schedule(const char* demoname, uint64_t startns);

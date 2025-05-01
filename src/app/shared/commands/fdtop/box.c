@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include "box.h"
@@ -87,7 +88,7 @@ struct ncplane* hud_create(struct notcurses* nc){
 static struct elem* elems; 
 #define NANOSECS_IN_SEC 1000000000ul
 
-static int
+int
 hud_print_finished(elem* list){
   elem* e = list;
   if(hud){
@@ -108,10 +109,10 @@ hud_print_finished(elem* list){
       ncplane_base(hud, &c);
       ncplane_set_bg_rgb(hud, nccell_bg_rgb(&c));
       ncplane_set_bg_alpha(hud, NCALPHA_BLEND);
-      ncplane_set_fg_rgb(hud, 0xffffff);
+      ncplane_set_fg_rgb(hud, 0x000000);
       ncplane_set_fg_alpha(hud, NCALPHA_OPAQUE);
       nccell_release(hud, &c);
-      if(ncplane_printf_yx(hud, line, 1, "%d", e->frames) < 0){
+      if(ncplane_printf_yx(hud, line, 1, "%u", e->frames) < 0){
         return -1;
       }
       char buf[NCPREFIXCOLUMNS + 2];
@@ -132,7 +133,7 @@ hud_print_finished(elem* list){
   return 0;
 }
 
-int hud_schedule(const char* demoname, uint startns){
+int hud_schedule(const char* demoname, uint64_t startns){
   elem* cure = malloc(sizeof(*cure));
   if(!cure){
     return -1;

@@ -1,5 +1,8 @@
 #include <semaphore.h>
+#include <pthread.h>
+#include <locale.h>
 #include <errno.h>
+#include <time.h>
 #include "../../../../disco/metrics/fd_metrics.h"
 #include "../../../../disco/topo/fd_topo.h"
 /*#include <cstdlib>*/
@@ -58,25 +61,53 @@ struct sigaction sa = {
   .sa_handler = signal1
 };
 
-void
-poll_metrics( fd_top_t * const app, fd_topo_t const * topo ){
+void*
+poll_metrics( 
+   void *arguments
+    /*fd_top_t * const app, fd_topo_t const * topo */
+    ){
+  thread_args *args_p = arguments;
+  fd_topo_t const * topo = args_p->topo;
+  fd_top_t * app = args_p->app;
+ time_t start = time(NULL);
+ while( ( time(NULL)-start)<10  ){
+ app->bank.txn_success = 0;
   ulong bank_tile_cnt = fd_topo_tile_name_cnt( topo, "bank" );
   for( ulong i = 0UL; i<bank_tile_cnt; i++ ){
-        ulong tile_idx = fd_topo_find_tile( topo, "bank", i );
-        fd_topo_tile_t const * bank = &topo->tiles[ tile_idx ];
+        fd_topo_tile_t const * bank = &topo->tiles[ fd_topo_find_tile( topo, "bank", i ) ];
         volatile ulong const * bank_metrics = fd_metrics_tile( bank->metrics );
-        ulong bank_txn_success = bank_metrics[ MIDX( COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ];
+        ulong bank_txn_success = bank_metrics[ MIDX( COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ]; 
+          /*bank_metrics[ MIDX( COUNTER, QUIC, TXNS_RECEIVED_QUIC_FRAG ) ];*/
         FD_LOG_INFO(( "bank_txn: %lu", bank_txn_success ));
-        app->bank.txn_success = bank_txn_success;
+        app->bank.txn_success += bank_txn_success;
+
   }
 
+  ulong gossip_tile_cnt = fd_topo_tile_name_cnt( topo, "net");
+  for( ulong i = 0UL; i<gossip_tile_cnt; i++) {
+      fd_topo_tile_t const * gossip_tile = &topo->tiles[ fd_topo_find_tile( topo, "net", i ) ];
+      volatile ulong const * gossip_metrics = fd_metrics_tile( gossip_tile->metrics );
+      ulong peer_cnt = gossip_metrics[ MIDX( COUNTER, NET, RX_BYTES_TOTAL ) ] +
+        MIDX( COUNTER, SOCK, RX_BYTES_TOTAL ) ; 
+      FD_LOG_INFO(( "GOSSIP_PEER_COUNTS: %lu", peer_cnt ));
+      app->stats.gossip_peer_cnt += peer_cnt;
+  }
+ }
+   pthread_exit( NULL );
+  return NULL;
 }
 
 /*static const unsigned MINROWS = 24;*/
 /*static const unsigned MINCOLS = 76;*/
+void*
+draw_monitor(
+    void *arguments
+    /*fd_top_t const * app FD_PARAM_UNUSED*/
+    ){
+  thread_args *args_p = arguments;
+  fd_top_t *app = args_p->app;
 
-void
-draw_monitor( fd_top_t const * app ){
+  setlocale( LC_ALL, "" );
   struct notcurses* nc;
   notcurses_options nopts = { 0 };
   nc = notcurses_init( &nopts, NULL );
@@ -89,6 +120,8 @@ draw_monitor( fd_top_t const * app ){
   notcurses_drop_planes( nc );
   notcurses_stats_reset(nc, NULL);
   
+ time_t start = time(NULL);
+ while( ( time(NULL)-start)<10  ){
   struct ncplane* n = notcurses_stdplane(nc);
   uint64_t channels = 0;
   ncchannels_set_fg_rgb(&channels, 0); // explicit black + opaque
@@ -98,9 +131,16 @@ draw_monitor( fd_top_t const * app ){
   }
   ncplane_erase(n);
   hud_create(nc);
-  hud_schedule( "hellodbhbydvetyvdev", 0); 
-   notcurses_render( nc ); 
+  /*char ts = (char)(app->bank.txn_success + 30);*/
+  char ts[1024];
+  sprintf( ts, "%lu\n", app->bank.txn_success );
+    /*FD_LOG_ERR(( "%s", ts ));*/
+  hud_schedule( ts,0); 
+   notcurses_render( nc );
+ } 
    notcurses_stop( nc );
+   pthread_exit(NULL);
+   return NULL;
 }
 
 
@@ -128,14 +168,26 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
  
  /*char buffer1[MAX_TERMINAL_BUFFER_SIZE];*/
  /*char buffer2[MAX_TERMINAL_BUFFER_SIZE];*/
- 
+ pthread_t t1;
+ pthread_t t2;
+ thread_args args_p;
+
  fd_topo_join_workspaces( &config->topo, FD_SHMEM_JOIN_MODE_READ_ONLY );
  fd_topo_fill( &config->topo );
+
  fd_top_t app;
  memset( &app, 0, sizeof(app) );
- poll_metrics(&app, &config->topo); 
+ app.bank.txn_success = 0;
 
- draw_monitor(&app); 
+ args_p.app = &app;
+ args_p.topo = &config->topo;
+
+ pthread_create( &t1, NULL, &poll_metrics, &args_p);
+ /*poll_metrics(&app, &config->topo); */
+ pthread_create( &t2, NULL, &draw_monitor, &args_p);
+ pthread_join( t2, NULL);
+ /*draw_monitor(&app); */
+ /*}*/
 }
 
 

@@ -45,6 +45,8 @@ typedef struct {
    ulong quic_conn_cnt;
    ulong net_in_rx_cnt;
    ulong net_out_tx_cnt;
+
+   ulong gossip_peer_cnt;
   } stats;
   struct {
    ulong txn_success;
@@ -60,9 +62,17 @@ typedef struct {
 
 } fd_top_t;
 
+
+typedef struct {
+  fd_top_t * app;
+  fd_topo_t const * topo;
+} thread_args;
+
 void fdtop_cmd_fn( args_t * args, config_t * config );
 void fdtop_cmd_args( int * argc, char *** argv, args_t * args );
 void fdtop_cmd_perm( args_t * args, fd_cap_chk_t * chk, config_t const * config );
-void draw_monitor( fd_top_t const * app );
+void* draw_monitor( void * arguments );
+void* poll_metrics( void * arguments );
+/*void draw_monitor( fd_top_t const * app );*/
 
 #endif /* HEADER_fd_src_app_shared_commands_fdtop_h */
