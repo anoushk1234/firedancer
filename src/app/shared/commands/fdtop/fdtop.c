@@ -17,10 +17,12 @@
 #include "../../fd_config.h"
 #include "../../fd_cap_chk.h"
 #include "../../../../util/log/fd_log.h"
-#include "fdtop.h"
-#include "box.h"
-#include "menu.h"
+/*#include "box.h"*/
 #include "helpers.h"
+/*#include "internal.h"*/
+/*#include "fdtop.h"*/
+#include "menu.h"
+
 
 /* TODO: Arbitrary number*/
 #define MAX_TERMINAL_BUFFER_SIZE 32000
@@ -112,10 +114,7 @@ poll_metrics( void *arguments ){
 
 
 void*
-draw_monitor(
-    void *arguments
-    /*fd_top_t const * app FD_PARAM_UNUSED*/
-    ){
+draw_monitor( void *arguments ){
   thread_args *args_p = arguments;
   fd_top_t *app = args_p->app;
 
@@ -145,7 +144,7 @@ draw_monitor(
   notcurses_stats_reset(nc, NULL);
   
   for(;;){
-   fdtop_menu_create( nc );
+   fdtop_menu_create( nc, app );
   /*hud_create(nc);*/
   /*char ts = (char)(app->bank.txn_success + 30);*/
   char ts[1024];

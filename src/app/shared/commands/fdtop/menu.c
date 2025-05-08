@@ -1,6 +1,6 @@
 #include <notcurses/notcurses.h>
+#include <sys/types.h>
 #include "../../../../util/log/fd_log.h"
-#include "helpers.h"
 #include "menu.h"
 
 
@@ -48,7 +48,7 @@ fdtop_menu_refresh( struct ncplane *zero_plane, unsigned ylen FD_PARAM_UNUSED, u
 }
 
 int
-fdtop_menu_create( struct notcurses* nc ){
+fdtop_menu_create( struct notcurses* nc, fd_top_t *app ){
   unsigned ylen, xlen;
   notcurses_term_dim_yx( nc, &ylen, &xlen );
 
@@ -75,30 +75,40 @@ fdtop_menu_create( struct notcurses* nc ){
   fdtop_menu_bg_color_scheme( zero_plane );
 
   fdtop_menu_refresh( zero_plane, ylen, xlen );
-  fdtop_menu_bar_create( zero_plane, ylen, xlen );
+  fdtop_menu_bar_create( zero_plane, xlen, app->app_state.page_number );
   return 0; 
 }
 
-int fdtop_menu_bar_create( struct ncplane *zero_plane , unsigned ylen FD_PARAM_UNUSED, unsigned xlen ){
+int fdtop_menu_bar_create( struct ncplane *zero_plane , unsigned xlen, int page_number ){
   struct ncplane *one_plane = ncplane_dup( zero_plane, NULL );
   unsigned int oldy, oldx;
   ncplane_dim_yx( one_plane, &oldy, &oldx );
   ncplane_resize_simple( one_plane, 4, oldx );
   ncplane_cursor_move_yx( one_plane , 0, 0 );
+  
   int ret = ncplane_double_box_sized( 
       one_plane, 
       0, 
       fdtop_menu_bar_color_scheme(), 
       3, 
       xlen,  
-      NCBOXMASK_TOP | NCBOXMASK_LEFT | NCBOXMASK_RIGHT
-      | NCBOXCORNER_MASK
+      NCBOXMASK_TOP   | 
+      NCBOXMASK_LEFT  |
+      NCBOXMASK_RIGHT | 
+      NCBOXCORNER_MASK
   );
-  /*TODO: branch hint*/
-  if( -1==ret ){
 
+  if( FD_UNLIKELY( -1==ret ) ){
       FD_LOG_WARNING(( "ncplane_double_box_sized failed" ));
+      ncplane_destroy( one_plane );
       return -1;
+  }
+  int title_y = 1, title_x = 2;
+  for( ulong idx = 0; idx<MENU_ITEMS_LEN; idx++ ){
+    u_int32_t fg = (ulong)page_number == idx ? FD_MINT : FD_WHITE;
+    ncplane_set_fg_rgb( one_plane, fg ); 
+    ncplane_putstr_yx( one_plane, title_y, title_x, menu_items[ idx ] ); 
+    title_x+=sizeof(menu_items[ idx ]);
   }
   return 0;
 }
