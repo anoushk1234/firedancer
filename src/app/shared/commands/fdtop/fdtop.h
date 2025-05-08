@@ -1,5 +1,5 @@
-#ifndef HEADER_fd_src_app_shared_commands_fdtop_h
-#define HEADER_fd_src_app_shared_commands_fdtop_h
+#ifndef HEADER_fd_src_app_shared_commands_fdtop_fdtop_h
+#define HEADER_fd_src_app_shared_commands_fdtop_fdtop_h
 #include "../../fd_config.h"
 /*#include "../../../../util/fd_util.h"*/
 #include "../../../../flamenco/leaders/fd_leaders.h"
@@ -60,19 +60,19 @@ typedef struct {
    int monitors;
   } app_state;
 
-} fd_top_t;
+} fd_top_t __attribute__((aligned(8)));
 
 
 typedef struct {
   fd_top_t * app;
   fd_topo_t const * topo;
-} thread_args;
+  /*sem_t *control_t;*/
+} thread_args __attribute__((aligned(8)));
 
 void fdtop_cmd_fn( args_t * args, config_t * config );
 void fdtop_cmd_args( int * argc, char *** argv, args_t * args );
 void fdtop_cmd_perm( args_t * args, fd_cap_chk_t * chk, config_t const * config );
 void* draw_monitor( void * arguments );
 void* poll_metrics( void * arguments );
-/*void draw_monitor( fd_top_t const * app );*/
 
-#endif /* HEADER_fd_src_app_shared_commands_fdtop_h */
+#endif /* HEADER_fd_src_app_shared_commands_fdtop_fdtop_h */

@@ -1,7 +1,9 @@
+#include <notcurses/notcurses.h>
 #include <semaphore.h>
 #include <pthread.h>
 #include <locale.h>
 #include <errno.h>
+#include <stdint.h>
 #include <time.h>
 #include "../../../../disco/metrics/fd_metrics.h"
 #include "../../../../disco/topo/fd_topo.h"
@@ -17,6 +19,8 @@
 #include "../../../../util/log/fd_log.h"
 #include "fdtop.h"
 #include "box.h"
+#include "menu.h"
+#include "helpers.h"
 
 /* TODO: Arbitrary number*/
 #define MAX_TERMINAL_BUFFER_SIZE 32000
@@ -48,7 +52,7 @@ void
 fdtop_cmd_args( int *    argc,
                 char *** argv,
                 args_t * args ) {
- args->fdtop.polling_rate_ms = fd_env_strip_cmdline_ulong( argc, argv, "--poll_ms", NULL, 100);
+ args->fdtop.polling_rate_ms = fd_env_strip_cmdline_ulong( argc, argv, "--poll_ms", NULL, 100UL );
 }
 
 static void signal1( int sig ){
@@ -61,44 +65,52 @@ struct sigaction sa = {
   .sa_handler = signal1
 };
 
+int
+handle_input( struct notcurses* nc FD_PARAM_UNUSED ){
+  return 0;
+  /*while(){*/
+  /**/
+  /*}*/
+}
+
 void*
-poll_metrics( 
-   void *arguments
-    /*fd_top_t * const app, fd_topo_t const * topo */
-    ){
+poll_metrics( void *arguments ){
   thread_args *args_p = arguments;
+
   fd_topo_t const * topo = args_p->topo;
   fd_top_t * app = args_p->app;
- time_t start = time(NULL);
- while( ( time(NULL)-start)<10  ){
- app->bank.txn_success = 0;
-  ulong bank_tile_cnt = fd_topo_tile_name_cnt( topo, "bank" );
-  for( ulong i = 0UL; i<bank_tile_cnt; i++ ){
-        fd_topo_tile_t const * bank = &topo->tiles[ fd_topo_find_tile( topo, "bank", i ) ];
-        volatile ulong const * bank_metrics = fd_metrics_tile( bank->metrics );
-        ulong bank_txn_success = bank_metrics[ MIDX( COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ]; 
-          /*bank_metrics[ MIDX( COUNTER, QUIC, TXNS_RECEIVED_QUIC_FRAG ) ];*/
-        FD_LOG_INFO(( "bank_txn: %lu", bank_txn_success ));
-        app->bank.txn_success += bank_txn_success;
+ 
+  ulong start = get_unix_timestamp_ms();
+  for(;;){
+    if( ( get_unix_timestamp_ms()-start)<app->polling_rate_ms  ){
+       app->bank.txn_success = 0;
+        ulong bank_tile_cnt = fd_topo_tile_name_cnt( topo, "bank" );
+          for( ulong i = 0UL; i<bank_tile_cnt; i++ ){
+                fd_topo_tile_t const * bank = &topo->tiles[ fd_topo_find_tile( topo, "bank", i ) ];
+                volatile ulong const * bank_metrics = fd_metrics_tile( bank->metrics );
+                ulong bank_txn_success = bank_metrics[ MIDX( COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ]; 
+                  /*bank_metrics[ MIDX( COUNTER, QUIC, TXNS_RECEIVED_QUIC_FRAG ) ];*/
+                /*FD_LOG_INFO(( "bank_txn: %lu", bank_txn_success ));*/
+                app->bank.txn_success += bank_txn_success;
 
-  }
+          }
 
-  ulong gossip_tile_cnt = fd_topo_tile_name_cnt( topo, "net");
-  for( ulong i = 0UL; i<gossip_tile_cnt; i++) {
-      fd_topo_tile_t const * gossip_tile = &topo->tiles[ fd_topo_find_tile( topo, "net", i ) ];
-      volatile ulong const * gossip_metrics = fd_metrics_tile( gossip_tile->metrics );
-      ulong peer_cnt = gossip_metrics[ MIDX( COUNTER, NET, RX_BYTES_TOTAL ) ] +
-        MIDX( COUNTER, SOCK, RX_BYTES_TOTAL ) ; 
-      FD_LOG_INFO(( "GOSSIP_PEER_COUNTS: %lu", peer_cnt ));
-      app->stats.gossip_peer_cnt += peer_cnt;
-  }
- }
-   pthread_exit( NULL );
+        ulong gossip_tile_cnt = fd_topo_tile_name_cnt( topo, "net");
+          for( ulong i = 0UL; i<gossip_tile_cnt; i++) {
+              fd_topo_tile_t const * gossip_tile = &topo->tiles[ fd_topo_find_tile( topo, "net", i ) ];
+              volatile ulong const * gossip_metrics = fd_metrics_tile( gossip_tile->metrics );
+              ulong peer_cnt = gossip_metrics[ MIDX( COUNTER, NET, RX_BYTES_TOTAL ) ] +
+                MIDX( COUNTER, SOCK, RX_BYTES_TOTAL ) ; 
+              /*FD_LOG_INFO(( "GOSSIP_PEER_COUNTS: %lu", peer_cnt ));*/
+              app->stats.gossip_peer_cnt += peer_cnt;
+          }
+       }
+    }
+  pthread_exit( NULL );
   return NULL;
 }
 
-/*static const unsigned MINROWS = 24;*/
-/*static const unsigned MINCOLS = 76;*/
+
 void*
 draw_monitor(
     void *arguments
@@ -107,10 +119,22 @@ draw_monitor(
   thread_args *args_p = arguments;
   fd_top_t *app = args_p->app;
 
-  setlocale( LC_ALL, "" );
+  if( FD_UNLIKELY( NULL==setlocale( LC_ALL, "" ) ) ){
+        FD_LOG_ERR(( "setlocale( LC_ALL ) failed" ));
+  }
   struct notcurses* nc;
   notcurses_options nopts = { 0 };
-  nc = notcurses_init( &nopts, NULL );
+#ifdef FD_DEBUG_MODE
+  FILE *fp;
+  if( FD_UNLIKELY( NULL==(fp = fopen( "/dev/tty1", "a+" )) ) ){
+        FD_LOG_ERR(( " fopen(/dev/tty1) failed" ));
+  }
+  FD_LOG_WARNING(( "debug mode" ));
+  nc = notcurses_init( &nopts, fp );
+#else
+  FD_LOG_WARNING(( "not debug mode" ));
+  nc = notcurses_init(  &nopts, NULL );
+#endif
   if( FD_UNLIKELY( NULL==nc ) ){
         FD_LOG_ERR(( "notcurses_init() failed" )); 
   }
@@ -120,24 +144,16 @@ draw_monitor(
   notcurses_drop_planes( nc );
   notcurses_stats_reset(nc, NULL);
   
- time_t start = time(NULL);
- while( ( time(NULL)-start)<10  ){
-  struct ncplane* n = notcurses_stdplane(nc);
-  uint64_t channels = 0;
-  ncchannels_set_fg_rgb(&channels, 0); // explicit black + opaque
-  ncchannels_set_bg_rgb(&channels, 0);
-  if(ncplane_set_base(n, "", 0, channels)){
-    FD_LOG_ERR(( "-1" ));
-  }
-  ncplane_erase(n);
-  hud_create(nc);
+  for(;;){
+   fdtop_menu_create( nc );
+  /*hud_create(nc);*/
   /*char ts = (char)(app->bank.txn_success + 30);*/
   char ts[1024];
   sprintf( ts, "%lu\n", app->bank.txn_success );
     /*FD_LOG_ERR(( "%s", ts ));*/
-  hud_schedule( ts,0); 
+  /*hud_schedule( ts,0); */
    notcurses_render( nc );
- } 
+}
    notcurses_stop( nc );
    pthread_exit(NULL);
    return NULL;
@@ -183,11 +199,9 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
  args_p.topo = &config->topo;
 
  pthread_create( &t1, NULL, &poll_metrics, &args_p);
- /*poll_metrics(&app, &config->topo); */
  pthread_create( &t2, NULL, &draw_monitor, &args_p);
+
  pthread_join( t2, NULL);
- /*draw_monitor(&app); */
- /*}*/
 }
 
 
