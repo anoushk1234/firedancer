@@ -8,7 +8,7 @@ const static char* menu_items[] = {
   "Tiles",
   "Sys Stats"
 };
-#define MENU_ITEMS_LEN sizeof(menu_items)/sizeof(char*)
+#define MENU_ITEMS_LEN (ulong)(sizeof(menu_items)/sizeof(char*))
 
 int
 fdtop_menu_create( struct notcurses* nc, fd_top_t *app );
