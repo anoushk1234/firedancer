@@ -71,6 +71,7 @@ typedef struct {
 typedef struct {
   fd_top_t * app;
   fd_topo_t const * topo;
+  struct notcurses * nc;
   /*sem_t *control_t;*/
 } thread_args __attribute__((aligned(8)));
 
@@ -79,7 +80,7 @@ void fdtop_cmd_args( int * argc, char *** argv, args_t * args );
 void fdtop_cmd_perm( args_t * args, fd_cap_chk_t * chk, config_t const * config );
 void* draw_monitor( void * arguments );
 void* poll_metrics( void * arguments );
-
+void* handle_input( void *arguments );
 
 
 
