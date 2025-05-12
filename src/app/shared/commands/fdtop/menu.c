@@ -20,7 +20,7 @@ fdtop_menu_bg_color_scheme( struct ncplane *n ){
 int
 fdtop_menu_refresh( struct ncplane *zero_plane, unsigned ylen FD_PARAM_UNUSED, unsigned xlen FD_PARAM_UNUSED){
     
-  ncplane_erase( zero_plane );
+  /*ncplane_erase( zero_plane );*/
 
 
   nccell ul = NCCELL_TRIVIAL_INITIALIZER, ll = NCCELL_TRIVIAL_INITIALIZER;
@@ -64,19 +64,23 @@ fdtop_menu_create( struct notcurses* nc, fd_top_t *app ){
      .flags = NCPLANE_OPTION_HORALIGNED |
               NCPLANE_OPTION_FIXED,
    };
-  struct ncplane *zero_plane = ncplane_create(
-      notcurses_stdplane( nc ),
+  /*(void)nopts;*/
+  struct ncplane *zero_plane = notcurses_stdplane( nc );
+  /*ncplane_erase( zero_plane );*/
+
+  /*TODO: Implement pragmatic error handling here. */
+  fdtop_menu_bg_color_scheme( zero_plane );
+  struct ncplane *base_plane = ncplane_create(
+      zero_plane,
       &nopts
       );
   if( FD_UNLIKELY( ( NULL==zero_plane ) ) ){
       FD_LOG_WARNING(( "ncplane_create failed" ));
       return -1;
   }
-  /*TODO: Implement pragmatic error handling here. */
-  fdtop_menu_bg_color_scheme( zero_plane );
-
-  fdtop_menu_refresh( zero_plane, ylen, xlen );
-  fdtop_menu_bar_create( zero_plane, xlen, app->app_state.page_number );
+  fdtop_menu_bg_color_scheme( base_plane );
+  fdtop_menu_refresh( base_plane, ylen, xlen );
+  fdtop_menu_bar_create( base_plane, xlen, app->app_state.page_number );
   return 0; 
 }
 
@@ -84,7 +88,7 @@ fdtop_menu_create( struct notcurses* nc, fd_top_t *app ){
 
 int fdtop_menu_bar_create( struct ncplane *zero_plane , unsigned xlen, int page_number ){
   struct ncplane *one_plane = ncplane_dup( zero_plane, NULL );
-  ncplane_erase( one_plane );
+  /*ncplane_erase( one_plane );*/
 
   unsigned int oldy, oldx;
   ncplane_dim_yx( one_plane, &oldy, &oldx );

@@ -17,10 +17,8 @@
 #include "../../fd_config.h"
 #include "../../fd_cap_chk.h"
 #include "../../../../util/log/fd_log.h"
-/*#include "box.h"*/
 #include "helpers.h"
-/*#include "internal.h"*/
-/*#include "fdtop.h"*/
+#include "widgets.h"
 #include "menu.h"
 
 
@@ -184,7 +182,10 @@ fdtop_help_modal( struct notcurses* nc ){
   ncvisual_destroy( ncv );
   return 0;
 }
-
+int fdtop_gossip( struct ncplane* n ){
+  fdtop_plot_graph( n, "Gossip Rx Messages", 5, 10);
+  return 0;
+}
 void*
 draw_monitor( void *arguments ){
 
@@ -208,6 +209,8 @@ draw_monitor( void *arguments ){
   if( app->app_state.show_help ){
     fdtop_help_modal( nc );
   }
+  fdtop_gossip( notcurses_stdplane( nc ) );
+  /*fdtop_plot_graph( notcurses_stdplane( nc ), "Gossip Rx Messages", 5, 10);*/
 
   /*hud_create(nc);*/
   /*char ts = (char)(app->bank.txn_success + 30);*/
