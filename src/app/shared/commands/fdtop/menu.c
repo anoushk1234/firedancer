@@ -4,7 +4,6 @@
 #include "menu.h"
 #include "helpers.h"
 
-int show_logo = 1;
 
 void
 fdtop_menu_bg_color_scheme( struct ncplane *n ){
@@ -80,10 +79,13 @@ fdtop_menu_create( struct notcurses* nc, fd_top_t *app ){
   fdtop_menu_bar_create( zero_plane, xlen, app->app_state.page_number );
   return 0; 
 }
+
 #include <wchar.h>
+
 int fdtop_menu_bar_create( struct ncplane *zero_plane , unsigned xlen, int page_number ){
   struct ncplane *one_plane = ncplane_dup( zero_plane, NULL );
-  /*ncplane_erase( one_plane );*/
+  ncplane_erase( one_plane );
+
   unsigned int oldy, oldx;
   ncplane_dim_yx( one_plane, &oldy, &oldx );
   ncplane_resize_simple( one_plane, 4, oldx );
@@ -116,7 +118,7 @@ int fdtop_menu_bar_create( struct ncplane *zero_plane , unsigned xlen, int page_
 
     /* Unroll manually since we know word length */
     #pragma unroll(8)
-    while(*word){
+    while( *word ){
       nccell tab_title_c = NCCELL_TRIVIAL_INITIALIZER;
       nccell_prime( 
           one_plane, 
@@ -134,43 +136,5 @@ int fdtop_menu_bar_create( struct ncplane *zero_plane , unsigned xlen, int page_
 
     title_x+=sizeof(menu_items[ idx ]);
   }
-  /*TODO: cleanup, add hints
-   * Temporary shenanigans to display some kind of loading logo purely for
-   * aesthetic reasons.
-   * */
-  if( 0==show_logo ){
-    time_t start = get_unix_timestamp_s();
-    while( get_unix_timestamp_s() - start < 1 ){
-     continue;
-    }
-    return 0;
-  }
-  struct ncvisual* ncv = ncvisual_from_file( "src/disco/gui/dist/assets/firedancer-D_J0EzUc.svg" );
-  if( NULL==ncv ){
-      FD_LOG_WARNING(( "ncvisual_from_file failed" ));
-    return -1;
-  }
-
-  unsigned pdimy, pdimx;
-  ncplane_pixel_geom( one_plane, NULL, NULL, &pdimy, &pdimx, NULL, NULL );
-  if( FD_UNLIKELY( ncvisual_resize( ncv,  (int)(pdimy * 1), (int)(pdimx * 4) ) ) ){
-    ncvisual_destroy( ncv );
-    return -1;
-  }
-  
-  struct ncvisual_options vopts = {
-  .n = zero_plane,
-  .y = NCALIGN_CENTER,
-  .x = NCALIGN_CENTER,
-  .blitter = NCBLIT_PIXEL,
-  .scaling = NCSCALE_NONE,
-  .flags = NCVISUAL_OPTION_CHILDPLANE,
-   };
-  struct notcurses* nc = ncplane_notcurses( one_plane );
-  ncvisual_blit( nc, ncv, &vopts );
-
-
-  ncvisual_destroy( ncv );
-  show_logo = 0;
   return 0;
 }

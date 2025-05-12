@@ -67,25 +67,30 @@ struct sigaction sa = {
   .sa_handler = signal1
 };
 
-/*TODO: use ncurses blocking input on sep thread to avoid blocking monitor*/
 void*
 handle_input( void *arguments ){
   thread_args *args_p = arguments;
   fd_top_t * app = args_p->app;
   struct notcurses *nc = args_p->nc;
   ncinput key;
+  u_int32_t id;
 
-  for(;;){
-  if( FD_UNLIKELY( NULL==nc ) ){
-    FD_LOG_WARNING(( "nc NULL" ));
-    sleep(2);
-    continue;
-  }
-  notcurses_get_blocking( nc, &key );
-  if( FD_UNLIKELY( '\t'==key.id ) ){
-     app->app_state.page_number = (int)next_page( app );;
-  /*FD_LOG_WARNING(( "key: %i %i %lu %lu", key.id, app->app_state.page_number, np, (ulong)((ulong)(app->app_state.page_number + 1) % MENU_ITEMS_LEN) ));*/
-  }
+  while( (id = notcurses_get_blocking( nc, &key )) != (u_int32_t)-1 ){
+
+    
+    if( FD_UNLIKELY( NCKEY_EOF==id ) ){
+      break;
+    }
+
+    if( FD_LIKELY( '\t'==key.id ) ){
+       app->app_state.page_number = (int)next_page( app );
+    /*FD_LOG_WARNING(( "key: %i %i %lu %lu", key.id, app->app_state.page_number, np, (ulong)((ulong)(app->app_state.page_number + 1) % MENU_ITEMS_LEN) ));*/
+    }
+
+ 
+    if( FD_LIKELY( 'h'==key.id ) ){
+      app->app_state.show_help ^= 1;
+    }
   }
   pthread_exit(NULL);
   return NULL;
@@ -129,13 +134,57 @@ poll_metrics( void *arguments ){
   return NULL;
 }
 
-struct termios terminal_backup;
+int
+fdtop_help_modal( struct notcurses* nc ){
+  unsigned ylen, xlen;
+  notcurses_term_dim_yx( nc, &ylen, &xlen );
+  struct ncplane_options nopts = {
+     .y = NCALIGN_CENTER,
+     .x = NCALIGN_CENTER,
+     .rows = ylen / 2,
+     .cols = xlen / 3,
+     .userptr = NULL,
+     .name = "help modal",
+     .resizecb = ncplane_resize_placewithin,
+     .flags = NCPLANE_OPTION_HORALIGNED |
+              NCPLANE_OPTION_VERALIGNED,
+   };
+  struct ncplane *modal_p = ncplane_create(
+      notcurses_stdplane( nc ),
+      &nopts
+      );
+  ncplane_set_base( modal_p, "", 0, nc_channels_init(0, FD_BLACK, NCALPHA_BLEND, NCALPHA_BLEND ) );
+  if( FD_UNLIKELY( ( NULL==modal_p ) ) ){
+      FD_LOG_WARNING(( "ncplane_create failed" ));
+      return -1;
+  }
+/*TODO: cleanup, add hints
+   * Temporary shenanigans to display some kind of loading logo purely for
+   * aesthetic reasons. Eventually this will become a help menu for new users.
+   * */
+  struct ncvisual* ncv = ncvisual_from_file( "src/app/shared/commands/fdtop/images/fdgif.gif" );
+  if( NULL==ncv ){
+      FD_LOG_WARNING(( "ncvisual_from_file failed" ));
+    return -1;
+  }
 
-/*void*/
-/*restore_terminal( ){*/
-/*  (void)tcsetattr( STDIN_FILENO, TCSANOW, &terminal_backup );*/
-/*}*/
-/**/
+  
+  struct ncvisual_options vopts = {
+  .n = modal_p,
+  .y = NCALIGN_CENTER,
+  .x = NCALIGN_CENTER,
+  .blitter = NCBLIT_PIXEL,
+  .scaling = NCSCALE_STRETCH,
+   };
+  struct timespec abstime;
+  abstime.tv_nsec = 10 * NANOSECS_IN_SEC;
+  abstime.tv_sec = 10;
+  ncvisual_stream( nc, ncv, 1.0, NULL, &vopts, NULL); 
+ 
+  ncvisual_destroy( ncv );
+  return 0;
+}
+
 void*
 draw_monitor( void *arguments ){
 
@@ -144,18 +193,6 @@ draw_monitor( void *arguments ){
   struct notcurses *nc = args_p->nc;
 
 
-  /*args_p->nc = nc;*/
-  /*(void)restore_terminal;*/
-/*if( FD_UNLIKELY( 0!=tcgetattr( STDIN_FILENO, &terminal_backup ) ) ) {*/
-/*    FD_LOG_ERR(( "tcgetattr(STDIN_FILENO) failed (%i-%s)", errno, fd_io_strerror( errno ) ));*/
-/*  }*/
-/**/
-  /* Disable character echo and line buffering */
-/*  struct termios term = terminal_backup;*/
-/*  term.c_lflag &= (tcflag_t)~(ICANON | ECHO);*/
-/*  if( FD_UNLIKELY( 0!=tcsetattr( STDIN_FILENO, TCSANOW, &term ) ) ) {*/
-/*    FD_LOG_WARNING(( "tcsetattr(STDIN_FILENO) failed (%i-%s)", errno, fd_io_strerror( errno ) ));*/
-/*  }*/
 
   
   unsigned dimx, dimy;
@@ -164,8 +201,14 @@ draw_monitor( void *arguments ){
   notcurses_drop_planes( nc );
   notcurses_stats_reset(nc, NULL);
   
+
   for(;;){
-   fdtop_menu_create( nc, app );
+
+  fdtop_menu_create( nc, app );
+  if( app->app_state.show_help ){
+    fdtop_help_modal( nc );
+  }
+
   /*hud_create(nc);*/
   /*char ts = (char)(app->bank.txn_success + 30);*/
   /*handle_input( nc, app );*/
@@ -173,7 +216,7 @@ draw_monitor( void *arguments ){
   /*sprintf( ts, "%lu\n", app->bank.txn_success );*/
     /*FD_LOG_ERR(( "%s", ts ));*/
   /*hud_schedule( ts,0); */
-   notcurses_render( nc );
+  notcurses_render( nc );
 }
    notcurses_stop( nc );
    pthread_exit(NULL);
@@ -203,8 +246,6 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
    FD_LOG_ERR(( "sem_init(display_sem) lfailed (%i-%s)", errno, fd_io_strerror( errno ) ));
  }
  
- /*char buffer1[MAX_TERMINAL_BUFFER_SIZE];*/
- /*char buffer2[MAX_TERMINAL_BUFFER_SIZE];*/
  pthread_t t1;
  pthread_t t2;
  pthread_t t3;

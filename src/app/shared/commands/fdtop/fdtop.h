@@ -9,6 +9,9 @@
 #define FD_WHITE 0xFFFFFF
 #define FD_MINT 0x1abfa2
 
+
+#define NANOSECS_IN_SEC 1000000000ul
+
 /*TODO: Check if this is aligned by the compiler, if not align manually.*/
 typedef struct {
   ulong polling_rate_ms;
@@ -58,6 +61,7 @@ typedef struct {
   struct {
     
    int page_number;
+   int show_help;
 
    /* An integer where the first eight bits signify if the corresponding
      monitor at the respective index is enabled or disabled. */
