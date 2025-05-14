@@ -12,6 +12,9 @@
 
 #define NANOSECS_IN_SEC 1000000000ul
 
+#define MENU_BAR_Y 3
+#define WIDGET_MARGIN 2
+
 /*TODO: Check if this is aligned by the compiler, if not align manually.*/
 typedef struct {
   ulong polling_rate_ms;
@@ -59,6 +62,9 @@ typedef struct {
    ulong txn_success;
   } bank;
   struct {
+    ulong gossip_msg_rx;
+  } gossip;
+  struct {
     
    int page_number;
    int show_help;
@@ -66,6 +72,11 @@ typedef struct {
    /* An integer where the first eight bits signify if the corresponding
      monitor at the respective index is enabled or disabled. */
    int monitors;
+   /* Ground zero plane is the std plane given by notcurses context,
+    * Base plane is plane the covers the whole screen and is above std plane but 
+    * below all the other planes where the main widgets exist.*/
+   struct ncplane* base_plane;
+   int widget_y;
   } app_state;
 
 } fd_top_t __attribute__((aligned(8)));
@@ -86,8 +97,46 @@ void* draw_monitor( void * arguments );
 void* poll_metrics( void * arguments );
 void* handle_input( void *arguments );
 
+#define CHART_BUFFER_LEN 32
 
+typedef struct {
+  void* buffer;
+  void* head;
+  void* tail;
+  /* Note: Assuming every element has the same size.*/
+  size_t data_sz;
+  size_t length;
+} ring_buffer __attribute__((aligned(8)));
 
+int
+rb_new( ring_buffer* rb, fd_alloc_t* alloc, size_t length, size_t data_sz ){
+  rb->buffer = fd_alloc_malloc( alloc, alignof(int*), length * data_sz );
+  
+  if( FD_UNLIKELY( NULL==rb->buffer ) ){
+    return -1;
+  }
+  rb->data_sz = data_sz;
+  rb->head = rb->buffer;
+  rb->tail = rb->buffer;
+  rb->length = length;
+  return 0;
+}
+int rb_pop_front( ring_buffer* rb,  void* data ){
+   if( rb->head == rb->tail ){
+     return -1;
+   }
+   memcpy( data, rb->head, rb->data_sz );
 
+   void* end = ((int*)rb->buffer) + (rb->length*rb->data_sz);
+   if( FD_UNLIKELY( rb->head==end ) ){
+     rb->head = rb->buffer;
+     return 0;
+   }
+   rb->head = ((int*)rb->head) + rb->data_sz;
+   return 0;
 
+}
+int rb_push_back(){
+  return 0;
+}
 #endif /* HEADER_fd_src_app_shared_commands_fdtop_fdtop_h */
