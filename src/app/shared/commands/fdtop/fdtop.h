@@ -110,7 +110,7 @@ typedef struct {
 
 int
 rb_new( ring_buffer* rb, fd_alloc_t* alloc, size_t length, size_t data_sz ){
-  rb->buffer = fd_alloc_malloc( alloc, alignof(int*), length * data_sz );
+  rb->buffer = fd_alloc_malloc( alloc, alignof(int), length * data_sz );
   
   if( FD_UNLIKELY( NULL==rb->buffer ) ){
     return -1;
@@ -121,18 +121,19 @@ rb_new( ring_buffer* rb, fd_alloc_t* alloc, size_t length, size_t data_sz ){
   rb->length = length;
   return 0;
 }
-int rb_pop_front( ring_buffer* rb,  void* data ){
+int
+rb_pop_front( ring_buffer* rb,  void* data ){
    if( rb->head == rb->tail ){
      return -1;
    }
-   memcpy( data, rb->head, rb->data_sz );
-
-   void* end = ((int*)rb->buffer) + (rb->length*rb->data_sz);
+   void* end = ((char*)rb->buffer) + (rb->length*rb->data_sz);
    if( FD_UNLIKELY( rb->head==end ) ){
      rb->head = rb->buffer;
+     memcpy( data, rb->head, rb->data_sz );
      return 0;
    }
-   rb->head = ((int*)rb->head) + rb->data_sz;
+   memcpy( data, rb->head, rb->data_sz );
+   rb->head = ((char*)rb->head) + rb->data_sz;
    return 0;
 
 }
@@ -142,15 +143,23 @@ int rb_pop_front( ring_buffer* rb,  void* data ){
  * happen often. Another reason is that our consumer
  * is faster than our producer since the monitor
  * is just a spin loop.*/
-int rb_push_back( ring_buffer* rb, void* data ){
-  memcpy( rb->tail, data, rb->data_sz );
-   void* end = ((int*)rb->buffer) + (rb->length*rb->data_sz);
+int
+rb_push_back( ring_buffer* rb, void* data ){
+   void* end = ((char*)rb->buffer) + (rb->length*rb->data_sz);
   
    if( FD_UNLIKELY( rb->tail==end ) ){
      rb->tail=rb->buffer;
+     memcpy( rb->tail, data, rb->data_sz );
      return 0;
    }
-  rb->tail =((int*)rb->tail) + rb->data_sz;
+    memcpy( rb->tail, data, rb->data_sz );
+    rb->tail = ((char*)rb->tail) + rb->data_sz;
+  
   return 0;
+}
+
+void
+rb_free( ring_buffer* rb, fd_alloc_t* alloc ){
+  fd_alloc_free( alloc, rb->buffer );
 }
 #endif /* HEADER_fd_src_app_shared_commands_fdtop_fdtop_h */
