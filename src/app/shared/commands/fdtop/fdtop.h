@@ -136,7 +136,21 @@ int rb_pop_front( ring_buffer* rb,  void* data ){
    return 0;
 
 }
-int rb_push_back(){
+/*Note: rb_ push_back does not check for overflows
+ * as it is expected the buffer be large enough
+ * for the application that overflows just don't
+ * happen often. Another reason is that our consumer
+ * is faster than our producer since the monitor
+ * is just a spin loop.*/
+int rb_push_back( ring_buffer* rb, void* data ){
+  memcpy( rb->tail, data, rb->data_sz );
+   void* end = ((int*)rb->buffer) + (rb->length*rb->data_sz);
+  
+   if( FD_UNLIKELY( rb->tail==end ) ){
+     rb->tail=rb->buffer;
+     return 0;
+   }
+  rb->tail =((int*)rb->tail) + rb->data_sz;
   return 0;
 }
 #endif /* HEADER_fd_src_app_shared_commands_fdtop_fdtop_h */
