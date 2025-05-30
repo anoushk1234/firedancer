@@ -22,10 +22,6 @@
 #include "menu.h"
 
 
-/* TODO: Arbitrary number*/
-#define MAX_TERMINAL_BUFFER_SIZE 32000
-
-
 void
 fdtop_cmd_perm( args_t *         args FD_PARAM_UNUSED,
                 fd_cap_chk_t *   chk,
@@ -52,7 +48,7 @@ void
 fdtop_cmd_args( int *    argc,
                 char *** argv,
                 args_t * args ) {
- args->fdtop.polling_rate_ms = fd_env_strip_cmdline_ulong( argc, argv, "--poll_ms", NULL, 100UL );
+ args->fdtop.polling_rate_ms = (long)fd_env_strip_cmdline_ulong( argc, argv, "--poll_ms", NULL, 200 );
 }
 
 static void signal1( int sig ){
@@ -70,6 +66,12 @@ handle_input( void *arguments ){
   thread_args *args_p = arguments;
   fd_top_t * app = args_p->app;
   struct notcurses *nc = args_p->nc;
+
+ if( NULL==nc){
+    pthread_exit(NULL);
+    return NULL;
+  }
+
   ncinput key;
   u_int32_t id;
 
@@ -100,35 +102,81 @@ poll_metrics( void *arguments ){
 
   fd_topo_t const * topo = args_p->topo;
   fd_top_t * app = args_p->app;
-  /*struct notcurses *nc = args_p->nc;*/
+  void* alloc_mem = args_p->alloc_mem;
 
-  ulong start = get_unix_timestamp_ms();
+  app->sock_tile_cnt   = fd_topo_tile_name_cnt( topo, "sock"   );
+  app->net_tile_cnt    = fd_topo_tile_name_cnt( topo, "net"    );
+  app->quic_tile_cnt   = fd_topo_tile_name_cnt( topo, "quic"   );
+  app->verify_tile_cnt = fd_topo_tile_name_cnt( topo, "verify" );
+  app->resolv_tile_cnt = fd_topo_tile_name_cnt( topo, "resolv" );
+  app->bank_tile_cnt   = fd_topo_tile_name_cnt( topo, "bank"   );
+  app->shred_tile_cnt  = fd_topo_tile_name_cnt( topo, "shred"  );
+  app->pack_tile_cnt   = fd_topo_tile_name_cnt( topo, "pack"  );
+
+  rb_new( &app->bank.txn_success, alloc_mem, FDTOP_RB_LEN, sizeof(int) );
+  
+
+  /*app->stats.last_poll_ns = fd_log_wallclock();*/
   for(;;){
-    if( ( get_unix_timestamp_ms()-start)<app->polling_rate_ms  ){
-       app->bank.txn_success = 0;
-        ulong bank_tile_cnt = fd_topo_tile_name_cnt( topo, "bank" );
-          for( ulong i = 0UL; i<bank_tile_cnt; i++ ){
+    long long duration = (fd_log_wallclock()-app->stats.last_poll_ns);
+        /*FD_LOG_WARNING(( "DUR: %li, LNS: %lu", duration, app->stats.last_poll_ns ));*/
+    if( (long long)duration >= (long long)((long long)app->polling_rate_ms * 1000000LL) ){
+        /*FD_LOG_WARNING(( "DUR: %lld, LNS: %lld", duration, (long long)app->polling_rate_ms ));*/
+          for( ulong i = 0UL; i<app->bank_tile_cnt; i++ ){
                 fd_topo_tile_t const * bank = &topo->tiles[ fd_topo_find_tile( topo, "bank", i ) ];
                 volatile ulong const * bank_metrics = fd_metrics_tile( bank->metrics );
-                ulong bank_txn_success = bank_metrics[ MIDX( COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ]; 
-                  /*bank_metrics[ MIDX( COUNTER, QUIC, TXNS_RECEIVED_QUIC_FRAG ) ];*/
-                /*FD_LOG_INFO(( "bank_txn: %lu", bank_txn_success ));*/
-                app->bank.txn_success += bank_txn_success;
+                app->bank.txn_success_last += bank_metrics[ MIDX( COUNTER, BANK, SUCCESSFUL_TRANSACTIONS ) ]; 
 
           }
 
-        ulong gossip_tile_cnt = fd_topo_tile_name_cnt( topo, "net");
-          for( ulong i = 0UL; i<gossip_tile_cnt; i++) {
-              fd_topo_tile_t const * gossip_tile = &topo->tiles[ fd_topo_find_tile( topo, "net", i ) ];
-              volatile ulong const * gossip_metrics = fd_metrics_tile( gossip_tile->metrics );
-              ulong peer_cnt = gossip_metrics[ MIDX( COUNTER, NET, RX_BYTES_TOTAL ) ] +
-                MIDX( COUNTER, SOCK, RX_BYTES_TOTAL ) ; 
-              /*FD_LOG_INFO(( "GOSSIP_PEER_COUNTS: %lu", peer_cnt ));*/
-              app->stats.gossip_peer_cnt += peer_cnt;
+          /* TODO: temporary just to demo the chart */
+          rb_push_back( &app->bank.txn_success, &app->bank.txn_success_last );
+
+          ulong pack_cus_consumed_in_block = 0;
+          for( ulong i = 0UL; i<app->pack_tile_cnt; i++ ){
+                fd_topo_tile_t const * pack = &topo->tiles[ fd_topo_find_tile( topo, "pack", i ) ];
+                volatile ulong const * pack_metrics = fd_metrics_tile( pack->metrics );
+                pack_cus_consumed_in_block += pack_metrics[ MIDX( GAUGE, PACK, CUS_CONSUMED_IN_BLOCK ) ]; 
           }
-       }
+       app->pack.cus_consumed_in_block = pack_cus_consumed_in_block;
+       
+        app->stats.quic_conn_cnt = 0UL; 
+        
+          for( ulong i = 0UL; i<app->quic_tile_cnt; i++ ){
+                fd_topo_tile_t const * quic = &topo->tiles[ fd_topo_find_tile( topo, "quic", i ) ];
+                volatile ulong const * quic_metrics = fd_metrics_tile( quic->metrics );
+                app->stats.quic_conn_cnt += quic_metrics[ MIDX( GAUGE, QUIC, CONNECTIONS_ACTIVE ) ]; 
+
+          }
+
+          
+          app->prev.net_total_rx_bytes = app->stats.net_total_rx_bytes;
+          app->prev.net_total_tx_bytes = app->stats.net_total_tx_bytes;
+          app->stats.net_total_rx_bytes = 0UL;
+          app->stats.net_total_tx_bytes = 0UL;
+
+          for( ulong i = 0UL; i<app->net_tile_cnt; i++ ){
+                fd_topo_tile_t const * net = &topo->tiles[ fd_topo_find_tile( topo, "net", i ) ];
+                volatile ulong const * net_metrics = fd_metrics_tile( net->metrics );
+                 
+                app->stats.net_total_rx_bytes  += net_metrics[ MIDX( COUNTER, NET, RX_BYTES_TOTAL ) ];
+                app->stats.net_total_tx_bytes += net_metrics[ MIDX( COUNTER, NET, TX_BYTES_TOTAL ) ];
+
+          }
+          for( ulong i=0UL; i<app->sock_tile_cnt; i++ ) {
+              fd_topo_tile_t const * sock = &topo->tiles[ fd_topo_find_tile( topo, "sock", i ) ];
+              volatile ulong * sock_metrics = fd_metrics_tile( sock->metrics );
+
+               app->stats.net_total_rx_bytes += sock_metrics[ MIDX( COUNTER, SOCK, RX_BYTES_TOTAL ) ];
+               app->stats.net_total_tx_bytes += sock_metrics[ MIDX( COUNTER, SOCK, TX_BYTES_TOTAL ) ];
+            }
+          app->prev.last_poll_ns = app->stats.last_poll_ns;
+          app->stats.last_poll_ns = fd_log_wallclock();
+      }
+          
     }
   pthread_exit( NULL );
+  rb_free( &app->bank.txn_success);
   return NULL;
 }
 
@@ -165,7 +213,6 @@ fdtop_help_modal( struct notcurses* nc ){
       FD_LOG_WARNING(( "ncvisual_from_file failed" ));
     return -1;
   }
-
   
   struct ncvisual_options vopts = {
   .n = modal_p,
@@ -182,8 +229,54 @@ fdtop_help_modal( struct notcurses* nc ){
   ncvisual_destroy( ncv );
   return 0;
 }
-int fdtop_gossip( struct ncplane* n ){
-  fdtop_plot_graph( n, "Gossip Rx Messages", 5, 10);
+/* TODO: Change gossip to something else because fd doesnt have gossip tile */
+int
+fdtop_gossip( ring_buffer* gossip_msg_rx, struct ncplane* n, int* widget_y){
+  unsigned dimy, dimx;
+  ncplane_dim_yx( n, &dimy, &dimx);
+  unsigned int rows = ( dimy - MENU_BAR_Y ) / 4;
+  unsigned int cols = dimx / 3; 
+  /*FD_LOG_WARNING(( "wy: %lu", gossip_msg_rx ));*/
+  /*ncplane_cursor_move_yx( n, 3, 3 );*/
+  fdtop_plot_graph( n, "Txn Success", rows, cols, *widget_y, 1, gossip_msg_rx );
+  *widget_y += rows / 2;
+  /*fdtop_plot_graph( n, "Txn Success", rows, cols, *widget_y + (int)rows, 1, gossip_msg_rx );*/
+  /**widget_y += rows / 2;*/
+  /*widget_x += cols*/
+  return 0;
+}
+int
+fdtop_validator_stats( int* widget_y, struct ncplane* n, fd_top_t* app ){
+  unsigned dimy, dimx;
+  ncplane_dim_yx( n, &dimy, &dimx);
+  unsigned int rows = ( dimy - MENU_BAR_Y ) / 4;
+  unsigned int cols = dimx / 3; 
+  /*TODO: Change this to a heap hashmap data sturcture for cleaner control flow
+   * map["bank"] = map<keys* [],values*[]>*/  
+  char* bank_keys[3] = { "Transaction Success", "Ingress( kb/s )", "Egress( kb/s )" };
+  char* bank_values[4] = { NULL, NULL, NULL, NULL };
+
+  for(ulong i = 0; i<3; i++){
+    bank_values[ i ] = malloc( 8 * sizeof(char));
+  }
+
+  itoa( app->bank.txn_success_last, bank_values[ 0 ], 10 );
+  itoa( (ulong)((double)(app->stats.net_total_rx_bytes - app->prev.net_total_rx_bytes) * 1000000000.0 / (double)(app->stats.last_poll_ns - app->prev.last_poll_ns) ), bank_values[ 1 ], 10 );
+  itoa( (ulong)((double)(app->stats.net_total_tx_bytes - app->prev.net_total_tx_bytes) * 1000000000.0 / (double)(app->stats.last_poll_ns - app->prev.last_poll_ns) ), bank_values[ 2 ], 10 );
+
+  char* quic_keys[1] = { "Active Connections" };
+  char* quic_values[2] = { NULL, NULL };
+
+  quic_values[0] = malloc(8 * sizeof(char));
+  itoa( app->stats.quic_conn_cnt, quic_values[0], 10 );
+
+  fdtop_render_stats( n, "Validator Overview", rows, cols, *widget_y, (dimx / 3) + 2 , "1", bank_keys, bank_values);
+  *widget_y+= rows;
+  fdtop_render_stats( n, "Quic Stats", rows, cols, *widget_y, (dimx / 3) + 2, "2", quic_keys, quic_values );
+  *widget_y = MENU_BAR_Y;
+  /*fdtop_render_stats( n, "Shred Stats", rows, cols - WIDGET_MARGIN, *widget_y, (dimx / 3) * 2 + 2, "3");*/
+  /**widget_y += rows;*/
+  /*fdtop_render_stats( n, "Pack Stats", rows, cols - WIDGET_MARGIN, *widget_y, (dimx / 3) * 2 + 2, "4");*/
   return 0;
 }
 void*
@@ -193,7 +286,11 @@ draw_monitor( void *arguments ){
   fd_top_t *app = args_p->app;
   struct notcurses *nc = args_p->nc;
 
-
+  if( NULL==nc){
+    pthread_exit(NULL);
+    return NULL;
+  }
+  
 
   
   unsigned dimx, dimy;
@@ -205,24 +302,22 @@ draw_monitor( void *arguments ){
 
   for(;;){
 
+  app->app_state.widget_y = 0;
   fdtop_menu_create( nc, app );
+  app->app_state.widget_y = MENU_BAR_Y;
   if( app->app_state.show_help ){
     fdtop_help_modal( nc );
   }
-  fdtop_gossip( notcurses_stdplane( nc ) );
-  /*fdtop_plot_graph( notcurses_stdplane( nc ), "Gossip Rx Messages", 5, 10);*/
-
-  /*hud_create(nc);*/
-  /*char ts = (char)(app->bank.txn_success + 30);*/
-  /*handle_input( nc, app );*/
-  /*char ts[1024];*/
-  /*sprintf( ts, "%lu\n", app->bank.txn_success );*/
-    /*FD_LOG_ERR(( "%s", ts ));*/
-  /*hud_schedule( ts,0); */
+  /*int widget_y =0;*/
+  if( FD_LIKELY( NULL!=app->app_state.base_plane ) ){
+    fdtop_gossip( &app->bank.txn_success, app->app_state.base_plane, &app->app_state.widget_y );
+     app->app_state.widget_y = MENU_BAR_Y;
+    fdtop_validator_stats( &app->app_state.widget_y, app->app_state.base_plane , app );
+  }
   notcurses_render( nc );
 }
    notcurses_stop( nc );
-   pthread_exit(NULL);
+   pthread_exit(NULL);;
    return NULL;
 }
 
@@ -257,38 +352,52 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
  fd_topo_join_workspaces( &config->topo, FD_SHMEM_JOIN_MODE_READ_ONLY );
  fd_topo_fill( &config->topo );
 
+  
  fd_top_t app;
  memset( &app, 0, sizeof(app) );
- app.bank.txn_success = 0;
+ app.polling_rate_ms = args->fdtop.polling_rate_ms;
+ 
+  ulong cpu_id = fd_log_cpu_id();
+  ulong page_cnt = 1UL;
+  fd_wksp_t*  wksp  = fd_wksp_new_anon( "fdtop", fd_cstr_to_shmem_page_sz( "huge" ), 1UL, &page_cnt, &cpu_id,0 ,0 );
+ fd_alloc_t* alloc = fd_alloc_join( fd_alloc_new( fd_wksp_alloc_laddr( wksp, fd_alloc_align(), fd_alloc_footprint(), 3 ), 3 ), 0 );
+ ulong footprint = rb_footprint( FDTOP_RB_LEN, sizeof(int) );
+ ulong max = 0;
+/*TODO: should we handle the error if malloc fails?*/
+ void* alloc_mem = fd_alloc_malloc_at_least( alloc, 0, footprint, &max );
+
+ /*void* alloc_mem = malloc( footprint );*/
  if( FD_UNLIKELY( NULL==setlocale( LC_ALL, "" ) ) ){
         FD_LOG_ERR(( "setlocale( LC_ALL ) failed" ));
   }
   struct notcurses* nc;
   notcurses_options nopts = { 0 };
 #ifdef FD_DEBUG_MODE
-  FILE *fp;
-  if( FD_UNLIKELY( NULL==(fp = fopen( "/dev/tty1", "a+" )) ) ){
-        FD_LOG_ERR(( " fopen(/dev/tty1) failed" ));
-  }
   FD_LOG_WARNING(( "debug mode" ));
-  nc = notcurses_init( &nopts, fp );
+  nc = NULL;
+  (void)nopts;
 #else
   FD_LOG_WARNING(( "not debug mode" ));
   nc = notcurses_init(  &nopts, NULL );
-#endif
   if( FD_UNLIKELY( NULL==nc ) ){
         FD_LOG_ERR(( "notcurses_init() failed" )); 
   }
+#endif
 
  args_p.app = &app;
  args_p.topo = &config->topo;
  args_p.nc = nc;
+ args_p.alloc_mem = alloc_mem;
 
  pthread_create( &t1, NULL, &poll_metrics, &args_p );
  pthread_create( &t2, NULL, &draw_monitor, &args_p );
  pthread_create( &t3, NULL, &handle_input, &args_p );
 /*(void)t3;*/
+#ifdef FD_DEBUG_MODE
+ pthread_join( t1, NULL);
+#else
  pthread_join( t2, NULL);
+#endif
 }
 
 

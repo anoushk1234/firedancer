@@ -1,6 +1,7 @@
 #ifndef HEADER_fd_src_app_shared_commands_fdtop_fdtop_h
 #define HEADER_fd_src_app_shared_commands_fdtop_fdtop_h
 #include <notcurses/notcurses.h>
+#include <stdlib.h>
 #include "../../fd_config.h"
 #include "../../../../flamenco/leaders/fd_leaders.h"
 /*#include "menu.h"*/
@@ -15,15 +16,99 @@
 #define MENU_BAR_Y 3
 #define WIDGET_MARGIN 2
 
+typedef struct {
+  void* buffer;
+  void* head;
+  void* tail;
+  /* Note: Assuming every element has the same size.*/
+  size_t data_sz;
+  size_t length;
+} ring_buffer __attribute__((aligned(8)));
+
+/*#define FDTOP_FOOTPRINT FDTOP_RB_LENGTH*/
+/*#define FDTOP_RB_FOOTPRINT 128 */ 
+#define FDTOP_RB_LEN 128
+
+FD_FN_CONST static inline ulong
+rb_footprint( ulong length, ulong data_sz ){
+   return length * data_sz;
+}
+
+static inline ring_buffer*
+rb_new( ring_buffer* rb, void* alloc_mem, size_t length, size_t data_sz ){
+  
+  /*FD_COMPILER_MFENCE();*/
+  /*rb->buffer = NULL;*/
+  rb->buffer = (char*)alloc_mem; 
+  /*FD_COMPILER_MFENCE();*/
+  memset( rb->buffer, 0, (size_t)rb_footprint( FDTOP_RB_LEN, sizeof(int) ));
+  if( FD_UNLIKELY( NULL==rb->buffer ) ){
+    return NULL;
+  }
+  rb->data_sz = data_sz;
+  rb->head = rb->buffer;
+  rb->tail = rb->buffer;
+  rb->length = length;
+  return rb;
+}
+static inline ring_buffer*
+rb_pop_front( ring_buffer* rb,  void* data ){
+   if( rb->head == rb->tail ){
+     return NULL;
+   }
+   void* end = ((char*)rb->buffer) + (rb->length*rb->data_sz);
+   if( FD_UNLIKELY( rb->head==end ) ){
+     rb->head = rb->buffer;
+     memcpy( data, rb->head, rb->data_sz );
+     return rb;
+   }
+   memcpy( data, rb->head, rb->data_sz );
+   rb->head = ((char*)rb->head) + rb->data_sz;
+   return rb;
+}
+/*Note: rb_ push_back does not check for overflows
+ * as it is expected that the buffer be large enough
+ * for the application that overflows are extremely
+ * unlikely. Another reason is that our consumer
+ * is faster than our producer since the monitor
+ * is just a spin loop.*/
+static inline ring_buffer*
+rb_push_back( ring_buffer* rb, void* data ){
+   void* end = ((char*)rb->buffer) + (rb->length*rb->data_sz);
+  
+   if( FD_UNLIKELY( rb->tail==end ) ){
+     rb->tail=rb->buffer;
+     memcpy( rb->tail, data, rb->data_sz );
+     return rb;
+   }
+    memcpy( rb->tail, data, rb->data_sz );
+    rb->tail = ((char*)rb->tail) + rb->data_sz;
+     return rb;
+}
+
+static inline void
+rb_free( ring_buffer* rb ){
+  free( rb->buffer );
+}
+
 /*TODO: Check if this is aligned by the compiler, if not align manually.*/
 typedef struct {
-  ulong polling_rate_ms;
+  long polling_rate_ms;
 
   fd_pubkey_t identity_key;
   char identity_key_base58[ FD_BASE58_ENCODED_32_SZ ];
   ulong next_leader_slot;
   ulong current_slot;
-  
+ 
+  ulong bank_tile_cnt;
+  ulong sock_tile_cnt;
+  ulong quic_tile_cnt;
+  ulong resolv_tile_cnt;
+  ulong shred_tile_cnt;
+  ulong net_tile_cnt;
+  ulong verify_tile_cnt;
+  ulong pack_tile_cnt;
+
   struct {
     ulong epoch;
     ulong tsstart;
@@ -53,17 +138,27 @@ typedef struct {
    ulong gossip_out_bytes;
 
    ulong quic_conn_cnt;
-   ulong net_in_rx_cnt;
-   ulong net_out_tx_cnt;
+   ulong net_total_rx_bytes;
+   ulong net_total_tx_bytes;
 
    ulong gossip_peer_cnt;
+   long last_poll_ns;
   } stats;
+  struct { 
+   ulong net_total_rx_bytes;
+   ulong net_total_tx_bytes;
+   long last_poll_ns;
+  } prev;
   struct {
-   ulong txn_success;
+   ring_buffer txn_success;
+   ulong txn_success_last;
   } bank;
   struct {
     ulong gossip_msg_rx;
   } gossip;
+  struct {
+    ulong cus_consumed_in_block;
+  } pack;
   struct {
     
    int page_number;
@@ -87,6 +182,7 @@ typedef struct {
   fd_top_t * app;
   fd_topo_t const * topo;
   struct notcurses * nc;
+  void* alloc_mem;
   /*sem_t *control_t;*/
 } thread_args __attribute__((aligned(8)));
 
@@ -99,67 +195,5 @@ void* handle_input( void *arguments );
 
 #define CHART_BUFFER_LEN 32
 
-typedef struct {
-  void* buffer;
-  void* head;
-  void* tail;
-  /* Note: Assuming every element has the same size.*/
-  size_t data_sz;
-  size_t length;
-} ring_buffer __attribute__((aligned(8)));
 
-int
-rb_new( ring_buffer* rb, fd_alloc_t* alloc, size_t length, size_t data_sz ){
-  rb->buffer = fd_alloc_malloc( alloc, alignof(int), length * data_sz );
-  
-  if( FD_UNLIKELY( NULL==rb->buffer ) ){
-    return -1;
-  }
-  rb->data_sz = data_sz;
-  rb->head = rb->buffer;
-  rb->tail = rb->buffer;
-  rb->length = length;
-  return 0;
-}
-int
-rb_pop_front( ring_buffer* rb,  void* data ){
-   if( rb->head == rb->tail ){
-     return -1;
-   }
-   void* end = ((char*)rb->buffer) + (rb->length*rb->data_sz);
-   if( FD_UNLIKELY( rb->head==end ) ){
-     rb->head = rb->buffer;
-     memcpy( data, rb->head, rb->data_sz );
-     return 0;
-   }
-   memcpy( data, rb->head, rb->data_sz );
-   rb->head = ((char*)rb->head) + rb->data_sz;
-   return 0;
-
-}
-/*Note: rb_ push_back does not check for overflows
- * as it is expected the buffer be large enough
- * for the application that overflows just don't
- * happen often. Another reason is that our consumer
- * is faster than our producer since the monitor
- * is just a spin loop.*/
-int
-rb_push_back( ring_buffer* rb, void* data ){
-   void* end = ((char*)rb->buffer) + (rb->length*rb->data_sz);
-  
-   if( FD_UNLIKELY( rb->tail==end ) ){
-     rb->tail=rb->buffer;
-     memcpy( rb->tail, data, rb->data_sz );
-     return 0;
-   }
-    memcpy( rb->tail, data, rb->data_sz );
-    rb->tail = ((char*)rb->tail) + rb->data_sz;
-  
-  return 0;
-}
-
-void
-rb_free( ring_buffer* rb, fd_alloc_t* alloc ){
-  fd_alloc_free( alloc, rb->buffer );
-}
 #endif /* HEADER_fd_src_app_shared_commands_fdtop_fdtop_h */

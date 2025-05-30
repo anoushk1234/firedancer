@@ -13,6 +13,18 @@ fdtop_plot_graph( struct ncplane* n,
                   int x,
                   ring_buffer* sample );
 
+
 int
-fdtop_render_stats( struct ncplane* parent, const char* title, unsigned int rows, unsigned int cols, int y, int x, char* tag);
+fdtop_render_stats( 
+    struct ncplane* parent,
+    const char* title,
+    unsigned int rows,
+    unsigned int cols,
+    int y,
+    int x,
+    const char* tag,
+    char** keys,
+    char** values
+    );
+
 #endif

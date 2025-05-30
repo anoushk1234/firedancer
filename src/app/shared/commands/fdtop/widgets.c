@@ -57,30 +57,41 @@ fdtop_plot_graph( struct ncplane *parent, const char * title, unsigned int rows 
 
   struct ncuplot* ncu = ncuplot_create( gplane, &opts, 0, 0 );
 /*u_int64_t ymax = 0;*/
-#pragma unroll(8)
-  for( ulong i = 0; i<8; i++ ){
-#pragma unroll(8)
-    for( ulong i = 0; i<8; i++ ){
-      ulong yval = 0;
-      rb_pop_front( gossip_msg_rx, &yval );
-      ncuplot_add_sample( ncu, xcnt, yval );
-      xcnt++;
-    }
-  }
- /*(void)gossip_msg_rx;*/
-  /*ncuplot_add_sample( ncu, (u_int64_t)get_unix_timestamp_s(), (u_int64_t)gossip_msg_rx );*/
-/*#pragma unroll(10)*/
-/*  for( ulong i = 0; i<10; i++ ){*/
-/*#pragma unroll(10)*/
-/*    for( ulong i = 0; i<10; i++ ){*/
-/*      ncuplot_add_sample( ncu, (u_int64_t)rand() % 200, (u_int64_t)rand() % 200 );*/
+/*#pragma unroll(8)*/
+/*  for( ulong i = 0; i<8; i++ ){*/
+/*#pragma unroll(8)*/
+/*    for( ulong i = 0; i<8; i++ ){*/
+/*      ulong yval = 0;*/
+/*      rb_pop_front( gossip_msg_rx, &yval );*/
+/*      ncuplot_add_sample( ncu, xcnt, yval );*/
+/*      xcnt++;*/
 /*    }*/
 /*  }*/
+ (void)gossip_msg_rx;
+  /*ncuplot_add_sample( ncu, (u_int64_t)get_unix_timestamp_s(), (u_int64_t)gossip_msg_rx );*/
+#pragma unroll(10)
+  for( ulong i = 0; i<10; i++ ){
+#pragma unroll(10)
+    for( ulong i = 0; i<10; i++ ){
+      ncuplot_add_sample( ncu, (u_int64_t)rand() % 200, (u_int64_t)rand() % 200 );
+    }
+  }
   return 0;
 }
 
 int
-fdtop_render_stats( struct ncplane* parent, const char* title, unsigned int rows, unsigned int cols, int y, int x , char* tag){
+fdtop_render_stats( 
+    struct ncplane* parent,
+    const char* title,
+    unsigned int rows,
+    unsigned int cols,
+    int y,
+    int x,
+    const char* tag,
+    char** FD_PARAM_UNUSED keys,
+    char** FD_PARAM_UNUSED values
+     
+    ){
   
   ncplane_options nopts = {
       .y = y,
@@ -157,6 +168,47 @@ fdtop_render_stats( struct ncplane* parent, const char* title, unsigned int rows
   ncplane_putc_yx( s_plane, title_y, title_x, &tab_title_c );
   title++;
   title_x++;
+  }
+
+  int entry_y = 2, entry_x = 2;
+    /*#pragma unroll(8)*/
+    while( *values ){
+      /*#pragma unroll(8)*/
+      while( FD_LIKELY( **keys ) ){
+      nccell key_c = NCCELL_TRIVIAL_INITIALIZER;
+      nccell_prime( 
+              s_plane, 
+              &key_c,
+              *keys, 
+              0, 
+              nc_channels_init( FD_WHITE, FD_BLACK, NCALPHA_OPAQUE, NCALPHA_OPAQUE ) 
+              );
+
+      ncplane_putc_yx( s_plane, entry_y, entry_x, &key_c );
+      entry_x++;
+      (*keys)++;
+    }
+
+      entry_x += 2;
+      while( FD_LIKELY( **values ) ){
+       
+      nccell value_c = NCCELL_TRIVIAL_INITIALIZER;
+      nccell_prime( 
+              s_plane, 
+              &value_c,
+              *values, 
+              0, 
+              nc_channels_init( FD_WHITE, FD_BLACK, NCALPHA_OPAQUE, NCALPHA_OPAQUE ) 
+              );
+
+      ncplane_putc_yx( s_plane, entry_y, entry_x, &value_c );
+      entry_x++;
+      (*values)++;
+    }
+    entry_x = 2;
+    entry_y++;
+    keys++;
+    values++;
   }
   return 0;
 }
