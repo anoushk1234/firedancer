@@ -31,7 +31,7 @@ union fdctl_args {
   } monitor;
 
   struct {
-    ulong polling_rate_ms;
+    long polling_rate_ms;
   } fdtop;
 
   struct {

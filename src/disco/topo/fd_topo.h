@@ -562,6 +562,7 @@ fd_topo_find_tile_out_link( fd_topo_t const *      topo,
                            char const *           name,
                            ulong                  kind_id ) {
   for( ulong i=0; i<tile->out_cnt; i++ ) {
+/*FD_LOG_WARNING(( "link out id: %lu %lu ", tile->out_link_id[ i ], tile->id ));*/
     if( FD_UNLIKELY( !strcmp( topo->links[ tile->out_link_id[ i ] ].name, name ) )
         && topo->links[ tile->out_link_id[ i ] ].kind_id == kind_id ) return i;
   }

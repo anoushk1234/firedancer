@@ -14,6 +14,7 @@
 #include <sys/resource.h>
 #include <unistd.h>
 /*#include <notcurses/notcurses.h>*/
+#include "../../../../disco/plugin/fd_plugin.h"
 #include "../../fd_config.h"
 #include "../../fd_cap_chk.h"
 #include "../../../../util/log/fd_log.h"
@@ -95,12 +96,86 @@ handle_input( void *arguments ){
   pthread_exit(NULL);
   return NULL;
 }
+fdtop_plugin_state_t*
+fdtop_plugin_state_poll( fdtop_plugin_state_t* state_t ){
+ fd_frag_meta_t* mline = state_t->mcache + fd_mcache_line_idx( state_t->seq, state_t->depth );
+  ulong seq_expected = state_t->seq;
 
+  ulong seq_found = fd_frag_meta_seq_query( mline );
+
+  if( FD_UNLIKELY( fd_seq_lt( seq_found, seq_expected ) ) ){
+    return NULL;
+  }
+
+  if( FD_LIKELY( fd_seq_eq( seq_found, seq_expected ) ) ){
+    void const* data = fd_chunk_to_laddr_const( state_t->base, mline->chunk );
+    /*ulong chunk = fd_laddr_to_chunk( state_t->base, data );*/
+
+    ulong sig = mline->sig;
+    ulong sz = mline->sz;
+
+   
+    fd_memcpy( state_t->buf, data, mline->sz );
+ FD_LOG_WARNING(( "data:%p size:%lu sig:%lu, chunk: %u",data, sz, sig, mline->chunk ));
+    FD_COMPILER_MFENCE();
+    
+    ulong seq_check = fd_frag_meta_seq_query( mline );
+    /* Check if the frag was overrun. */
+    if( fd_seq_ne( seq_check, seq_expected ) ){
+      state_t->seq = seq_check; /* Use latest seq */
+      return state_t;
+    }
+   
+   fdtop_on_plugin_message( state_t->buf, sig, sz );
+  }else{
+    /* Overrun while polling */;
+    ulong seq_check = fd_frag_meta_seq_query( mline );
+    state_t->seq = seq_check;
+    return state_t;
+  }
+  
+   return state_t;
+}
+void
+fdtop_on_plugin_message(uchar const *data, ulong sig, ulong sz){
+   (void)sz;
+    /*fd_vote_update_msg_t msg = { 0 }; */
+    /*uchar root[ 1024 ];*/
+     /*char* root = (char*)data;*/
+   /*struct fd_vote_update_msg msg = { 0 };*/
+   /*fd_plugin_msg_slot_start_t start = { 0 };*/
+    ulong* msg;
+    ulong _slot = 0;
+    ulong _parent_slot = 0;
+    switch( sig ) {
+    case FD_PLUGIN_MSG_SLOT_START:
+       msg = (ulong*)(data);
+      _slot = msg[ 0 ];
+      _parent_slot = msg[ 1 ];
+      /*start = *(fd_plugin_msg_slot_start_t const *)data;*/
+        /*msg.root_slot =  *(ulong const *)((char*)data +112UL+80UL);*/
+        /*msg = *((fd_vote_update_msg_t *)data);*/
+        /*fd_memcpy( &root, data, sz );*/
+        /*root = data */
+        FD_LOG_WARNING(( "some data: %lu %lu", _slot, _parent_slot ));
+        break;
+    case FD_PLUGIN_MSG_SLOT_ROOTED:
+        msg = (ulong*)(data);
+        _slot = msg[ 0 ];
+
+        FD_LOG_WARNING(( "some data: %lu", _slot ));
+        break;
+   
+    default:
+        /*printf("Default case is Matched.");*/
+        break;
+    }
+}
 void*
 poll_metrics( void *arguments ){
   thread_args *args_p = arguments;
 
-  fd_topo_t const * topo = args_p->topo;
+  fd_topo_t * topo = args_p->topo;
   fd_top_t * app = args_p->app;
   void* alloc_mem = args_p->alloc_mem;
 
@@ -111,16 +186,26 @@ poll_metrics( void *arguments ){
   app->resolv_tile_cnt = fd_topo_tile_name_cnt( topo, "resolv" );
   app->bank_tile_cnt   = fd_topo_tile_name_cnt( topo, "bank"   );
   app->shred_tile_cnt  = fd_topo_tile_name_cnt( topo, "shred"  );
-  app->pack_tile_cnt   = fd_topo_tile_name_cnt( topo, "pack"  );
+  app->pack_tile_cnt   = fd_topo_tile_name_cnt( topo, "pack"   );
 
   rb_new( &app->bank.txn_success, alloc_mem, FDTOP_RB_LEN, sizeof(int) );
-  
-
-  /*app->stats.last_poll_ns = fd_log_wallclock();*/
+ /*fd_topo_fill( topo ); */
+  fdtop_plugin_state_t state_t = { 0 };
+  /*fd_topo_wksp_t* plugin_wksp = &topo->workspaces[ fd_topo_find_wksp( topo, "plugin" ) ];*/
+  /**/
+  /*  fd_topo_workspace_fill( topo, plugin_wksp );*/
+  /*ulong plugin_tile_cnt = fd_topo_tile_name_cnt( topo, "plugin" ); */
+  /*fd_topo_tile_t const* plugin_tile = &topo->tiles[ fd_topo_find_tile( topo, "plugin", plugin_tile_cnt ) ];*/
+  fd_topo_link_t const* plugin_out_link = &topo->links[ fd_topo_find_link( topo, "plugin_out", 0  ) ];
+  void* base = (void*)fd_wksp_containing( plugin_out_link->dcache );
+    fd_frag_meta_t* plugin_mcache = plugin_out_link->mcache;
+    /*void* base = fd_topo_obj_laddr( topo, plugin_out_link->mcache_obj_id );*/
+    fdtop_plugin_state_init( &state_t, plugin_mcache, base );
+    
   for(;;){
-    long long duration = (fd_log_wallclock()-app->stats.last_poll_ns);
+    long duration = (fd_log_wallclock()-app->stats.last_poll_ns);
         /*FD_LOG_WARNING(( "DUR: %li, LNS: %lu", duration, app->stats.last_poll_ns ));*/
-    if( (long long)duration >= (long long)((long long)app->polling_rate_ms * 1000000LL) ){
+    if( duration >= (long)((long)app->polling_rate_ms * 1000000L) ){
         /*FD_LOG_WARNING(( "DUR: %lld, LNS: %lld", duration, (long long)app->polling_rate_ms ));*/
           for( ulong i = 0UL; i<app->bank_tile_cnt; i++ ){
                 fd_topo_tile_t const * bank = &topo->tiles[ fd_topo_find_tile( topo, "bank", i ) ];
@@ -170,6 +255,10 @@ poll_metrics( void *arguments ){
                app->stats.net_total_rx_bytes += sock_metrics[ MIDX( COUNTER, SOCK, RX_BYTES_TOTAL ) ];
                app->stats.net_total_tx_bytes += sock_metrics[ MIDX( COUNTER, SOCK, TX_BYTES_TOTAL ) ];
             }
+
+         if( !fdtop_plugin_state_poll( &state_t ) ){
+            FD_LOG_WARNING(( "fdtop_plugin_state_poll NULL" )); 
+         }; 
           app->prev.last_poll_ns = app->stats.last_poll_ns;
           app->stats.last_poll_ns = fd_log_wallclock();
       }
@@ -227,6 +316,7 @@ fdtop_help_modal( struct notcurses* nc ){
   ncvisual_stream( nc, ncv, 1.0, NULL, &vopts, NULL); 
  
   ncvisual_destroy( ncv );
+  ncplane_erase( modal_p );
   return 0;
 }
 /* TODO: Change gossip to something else because fd doesnt have gossip tile */
@@ -344,9 +434,7 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
    FD_LOG_ERR(( "sem_init(display_sem) lfailed (%i-%s)", errno, fd_io_strerror( errno ) ));
  }
  
- pthread_t t1;
- pthread_t t2;
- pthread_t t3;
+ 
  thread_args args_p;
 
  fd_topo_join_workspaces( &config->topo, FD_SHMEM_JOIN_MODE_READ_ONLY );
@@ -366,7 +454,7 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
 /*TODO: should we handle the error if malloc fails?*/
  void* alloc_mem = fd_alloc_malloc_at_least( alloc, 0, footprint, &max );
 
- /*void* alloc_mem = malloc( footprint );*/
+ 
  if( FD_UNLIKELY( NULL==setlocale( LC_ALL, "" ) ) ){
         FD_LOG_ERR(( "setlocale( LC_ALL ) failed" ));
   }
@@ -389,13 +477,15 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
  args_p.nc = nc;
  args_p.alloc_mem = alloc_mem;
 
+#ifdef FD_DEBUG_MODE
+ poll_metrics( &args_p );
+#else
+ pthread_t t1;
+ pthread_t t2;
+ pthread_t t3;
  pthread_create( &t1, NULL, &poll_metrics, &args_p );
  pthread_create( &t2, NULL, &draw_monitor, &args_p );
  pthread_create( &t3, NULL, &handle_input, &args_p );
-/*(void)t3;*/
-#ifdef FD_DEBUG_MODE
- pthread_join( t1, NULL);
-#else
  pthread_join( t2, NULL);
 #endif
 }

@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "box.h"
+
+
 struct ncplane* hud = NULL;
 #define HUD_ROWS (3 + 2) // 2 for borders
 static const int HUD_COLS = 23 + 2; // 2 for borders
@@ -146,3 +148,6 @@ int hud_schedule(const char* demoname, uint64_t startns){
   elems = cure;
   return hud_print_finished(elems);
 }
+
+/*int*/
+/*handle_input( struct notcurses* nc, )*/

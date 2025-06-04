@@ -5,16 +5,17 @@
 #include "helpers.h"
 
 
-void
+uint64_t
 fdtop_menu_bg_color_scheme( struct ncplane *n ){
   uint64_t channels = 0;
-  ncchannels_set_bg_alpha( &channels,  NCALPHA_BLEND );
-  ncchannels_set_fg_alpha( &channels,  NCALPHA_BLEND );
+  ncchannels_set_bg_alpha( &channels,  NCALPHA_OPAQUE );
+  ncchannels_set_fg_alpha( &channels,  NCALPHA_OPAQUE );
   ncchannels_set_bg_rgb( &channels, FD_BLACK );
   if( FD_UNLIKELY( -1==ncplane_set_base( n, "", 0, channels ) ) ){
     FD_LOG_ERR(( "ncplane_set_base failed" ));
+    return (u_int64_t)-1;
   }
-
+   return channels;
 }
 
 int
@@ -78,28 +79,31 @@ fdtop_menu_create( struct notcurses* nc, fd_top_t *app ){
       FD_LOG_WARNING(( "ncplane_create failed" ));
       return -1;
   }
+  app->app_state.base_plane = base_plane;
   fdtop_menu_bg_color_scheme( base_plane );
+ 
   fdtop_menu_refresh( base_plane, ylen, xlen );
   fdtop_menu_bar_create( base_plane, xlen, app->app_state.page_number );
+  /*app->app_state.widget_y += MENU_BAR_Y;*/
   return 0; 
 }
 
 #include <wchar.h>
 
-int fdtop_menu_bar_create( struct ncplane *zero_plane , unsigned xlen, int page_number ){
-  struct ncplane *one_plane = ncplane_dup( zero_plane, NULL );
+int fdtop_menu_bar_create( struct ncplane *one_plane , unsigned xlen, int page_number ){
+  /*struct ncplane *one_plane = ncplane_dup( zero_plane, NULL );*/
   /*ncplane_erase( one_plane );*/
 
   unsigned int oldy, oldx;
   ncplane_dim_yx( one_plane, &oldy, &oldx );
-  ncplane_resize_simple( one_plane, 4, oldx );
+  /*ncplane_resize_simple( one_plane, MENU_BAR_Y, oldx );*/
   ncplane_cursor_move_yx( one_plane , 0, 0 );
   
   int ret = ncplane_double_box_sized( 
       one_plane, 
       0, 
       fdtop_menu_bar_color_scheme(), 
-      3, 
+      MENU_BAR_Y, 
       xlen,  
       NCBOXMASK_TOP   | 
       NCBOXMASK_LEFT  |
@@ -120,6 +124,7 @@ int fdtop_menu_bar_create( struct ncplane *zero_plane , unsigned xlen, int page_
     unsigned int bg_alpha = (ulong)page_number == idx ? NCALPHA_OPAQUE : NCALPHA_TRANSPARENT;
     const char* word = menu_items[ idx ];
 
+    /*ncplane_erase_region( one_plane, title_y, title_x,1,sizeof(word));*/
     /* Unroll manually since we know word length */
     #pragma unroll(8)
     while( *word ){

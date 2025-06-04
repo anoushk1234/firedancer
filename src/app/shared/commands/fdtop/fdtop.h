@@ -3,6 +3,8 @@
 #include <notcurses/notcurses.h>
 #include <stdlib.h>
 #include "../../fd_config.h"
+#include "../../../../util/log/fd_log.h"
+#include "../../../../tango/mcache/fd_mcache.h"
 #include "../../../../flamenco/leaders/fd_leaders.h"
 /*#include "menu.h"*/
 
@@ -90,6 +92,35 @@ static inline void
 rb_free( ring_buffer* rb ){
   free( rb->buffer );
 }
+
+typedef struct{
+ fd_frag_meta_t* mcache;
+ /*Base chunk in the cache line*/
+ void* base;
+ ulong depth;
+ ulong seq;
+ uchar buf [ 4096 ];
+} fdtop_plugin_state_t;
+
+inline void
+fdtop_plugin_state_init(
+    fdtop_plugin_state_t* state_t,
+    fd_frag_meta_t* mcache,
+    void* base
+    ){
+  state_t->base = base;
+  state_t->mcache = mcache;
+  state_t->seq = 0UL;
+  state_t->depth = 128UL;
+}
+
+
+extern fdtop_plugin_state_t*
+fdtop_plugin_state_poll(
+    fdtop_plugin_state_t* state_t
+    );
+extern void
+fdtop_on_plugin_message( uchar const* data, ulong sig, ulong sz );
 
 /*TODO: Check if this is aligned by the compiler, if not align manually.*/
 typedef struct {
@@ -180,7 +211,7 @@ typedef struct {
 
 typedef struct {
   fd_top_t * app;
-  fd_topo_t const * topo;
+  fd_topo_t * topo;
   struct notcurses * nc;
   void* alloc_mem;
   /*sem_t *control_t;*/

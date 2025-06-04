@@ -36,7 +36,7 @@ name = "fd1"
 #
 # This means if running as sudo, the user will be the terminal user
 # which invoked sudo, not the root user.
-user = ""
+user = "newuser"
 
 # Absolute directory path to place scratch files used during setup and
 # operation.  The ledger and accounts databases will also be placed in
@@ -118,7 +118,7 @@ dynamic_port_range = "8900-9000"
     # If no path is provided, the default is to place the log file in
     # /tmp with a name that will be unique.  If specified as "-", the
     # permanent log will be written to stdout.
-    path = ""
+    path = "/home/newuser/validator.log"
 
     # Firedancer can colorize the stderr ephemeral log using ANSI escape
     # codes so that it looks pretty in a terminal.  This option must be
@@ -165,7 +165,7 @@ dynamic_port_range = "8900-9000"
     #
     # This string is passed to the Agave client with the
     # `SOLANA_METRICS_CONFIG` environment variable.
-    solana_metrics_config = ""
+    solana_metrics_config = "host=https://metrics.solana.com:8086,db=tds,u=testnet_write,p=c4fa841aa918bf8274e3e2a44d77568d9861b3ea"
 
 # The ledger is the set of information that can be replayed to get back
 # to the current state of the chain.  In Solana, it is considered a
@@ -257,7 +257,11 @@ dynamic_port_range = "8900-9000"
     # Routable DNS name or IP address and port number to use to
     # rendezvous with the gossip cluster.  These entrypoints are passed
     # to the Agave client with the `--entrypoint` argument.
-    entrypoints = []
+    entrypoints = [
+   "entrypoint.testnet.solana.com:8001",
+      "entrypoint2.testnet.solana.com:8001",
+      "entrypoint3.testnet.solana.com:8001",
+    ]
 
     # If true, checks at startup that at least one of the provided
     # entrypoints can connect to this validator on all necessary ports.
@@ -290,7 +294,7 @@ dynamic_port_range = "8900-9000"
     # If nonzero, enable JSON RPC on this port, and use the next port
     # for the RPC websocket.  If zero, disable JSON RPC.  This option is
     # passed to the Agave client with the `--rpc-port` argument.
-    port = 0
+    port = 8899
 
     # If true, all RPC operations are enabled on this validator,
     # including non-default RPC methods for querying chain state and
@@ -302,7 +306,7 @@ dynamic_port_range = "8900-9000"
     # published in the `solana gossip` command for use by others.  This
     # option is passed to the Agave client with the
     # `--private-rpc` argument.
-    private = false
+    private = true
 
     # The address to bind the RPC port.  If no address is specified,
     # the default RPC bind address is 127.0.0.1 if [rpc.private] = true,
@@ -390,7 +394,7 @@ dynamic_port_range = "8900-9000"
     #
     # The default value is 10MB/s.  This option is passed to the Agave
     # client with the `--minimum-snapshot-download-speed` argument.
-    minimum_snapshot_download_speed = 10485760
+    minimum_snapshot_download_speed = 1000
 
     # Absolute directory path for storing snapshots.  If no path is
     # provided, it defaults to the [ledger.path] option from above.
@@ -433,7 +437,7 @@ dynamic_port_range = "8900-9000"
     #
     # This option is passed to the Agave client with the
     # `--identity` argument.
-    identity_path = ""
+    identity_path = "/home/{user}/identity.json"
 
     # Absolute path to a `keypair.json` containing the identity of the
     # voting account of the validator.  If no voting account is
@@ -484,13 +488,13 @@ dynamic_port_range = "8900-9000"
     # to ensure you can keep up with the network.  This option is passed
     # to the Agave client (inverted) with the
     # `--no-poh-speed-test` argument.
-    poh_speed_test = true
+    poh_speed_test = false
 
     # If set, require the genesis block to have the given hash.  If it
     # does not the validator will abort with an error.  This option is
     # passed to the Agave client with the
     # `--expected-genesis-hash` argument.
-    expected_genesis_hash = ""
+    expected_genesis_hash = "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY"
 
     # If nonzero, after processing the ledger, and the next slot is the
     # provided value, wait until a supermajority of stake is visible on
@@ -530,7 +534,7 @@ dynamic_port_range = "8900-9000"
     # this is not disabled, and the speed test fails, the validator will
     # refuse to start.  This option is passed to the Agave client
     # (inverted) with the `--no-os-network-limits-test` argument.
-    os_network_limits_test = true
+    os_network_limits_test = false 
 
     # If nonempty, add a hard fork at each of the provided slots.  These
     # options are passed to the Agave client with the
@@ -542,7 +546,17 @@ dynamic_port_range = "8900-9000"
     # ignored.  If no known validators are specified, any hash will be
     # accepted.  These options are passed to the Agave client with
     # the `--trusted-validator` argument.
-    known_validators = []
+     known_validators = [
+        "5D1fNXzvv5NjV1ysLjirC4WY92RNsVH18vjmcszZd8on",
+        "dDzy5SR3AXdYWVqbDEkVFdvSPCtS9ihF5kJkHCtXoFs",
+        "Ft5fbkqNa76vnsjYNwjDZUXoTWpP7VYm3mtsaQckQADN",
+        "eoKpUABi59aT4rR9HGS3LcMecfut9x7zJyodWWP43YQ",
+        "9QxCLckBiJc783jnMvXZubK4wH86Eqqvashtrwvcsgkv",
+        "BDmztcdSYbNF9JsKsYi9jgqK7G8z3zC3cyZkyjNR9ynC",
+        "4wjZmBoiwQ2s3fEL1og4gUcgWNtJoEkXNdG1yMW44nzr",
+        "7bfHs4BJu2AvoDyzfW1KuviVZNKYLcDh85XtMppFQ3LR",
+        "PLabztxPVFSGJQpLQT5CaXccdugAQsNgKHWAzZKQHJo"
+    ]
 
 # CPU cores in Firedancer are carefully managed.  Where a typical
 # program lets the operating system scheduler determine which threads to
@@ -1228,7 +1242,7 @@ dynamic_port_range = "8900-9000"
         gui_listen_address = "127.0.0.1"
 
         # The port to listen on.
-        gui_listen_port = 80
+        gui_listen_port = 5555
 
         # Maximum number of simultaneous HTTP connections which can be
         # open.  The server closes an HTTP connection after each
