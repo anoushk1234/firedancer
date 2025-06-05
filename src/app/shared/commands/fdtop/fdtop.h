@@ -28,7 +28,7 @@ typedef struct {
 } ring_buffer __attribute__((aligned(8)));
 
 /*#define FDTOP_FOOTPRINT FDTOP_RB_LENGTH*/
-/*#define FDTOP_RB_FOOTPRINT 128 */ 
+/*#define FDTOP_RB_FOOTPRINT 128 */
 #define FDTOP_RB_LEN 128
 
 FD_FN_CONST static inline ulong
@@ -38,10 +38,10 @@ rb_footprint( ulong length, ulong data_sz ){
 
 static inline ring_buffer*
 rb_new( ring_buffer* rb, void* alloc_mem, size_t length, size_t data_sz ){
-  
+
   /*FD_COMPILER_MFENCE();*/
   /*rb->buffer = NULL;*/
-  rb->buffer = (char*)alloc_mem; 
+  rb->buffer = (char*)alloc_mem;
   /*FD_COMPILER_MFENCE();*/
   memset( rb->buffer, 0, (size_t)rb_footprint( FDTOP_RB_LEN, sizeof(int) ));
   if( FD_UNLIKELY( NULL==rb->buffer ) ){
@@ -77,7 +77,7 @@ rb_pop_front( ring_buffer* rb,  void* data ){
 static inline ring_buffer*
 rb_push_back( ring_buffer* rb, void* data ){
    void* end = ((char*)rb->buffer) + (rb->length*rb->data_sz);
-  
+
    if( FD_UNLIKELY( rb->tail==end ) ){
      rb->tail=rb->buffer;
      memcpy( rb->tail, data, rb->data_sz );
@@ -95,11 +95,11 @@ rb_free( ring_buffer* rb ){
 
 typedef struct{
  fd_frag_meta_t* mcache;
- /*Base chunk in the cache line*/
+ /*Base chunk in the cache line, points to the start of the workspace*/
  void* base;
  ulong depth;
  ulong seq;
- uchar buf [ 4096 ];
+ uchar buf[ 65536 ];
 } fdtop_plugin_state_t;
 
 inline void
@@ -111,7 +111,7 @@ fdtop_plugin_state_init(
   state_t->base = base;
   state_t->mcache = mcache;
   state_t->seq = 0UL;
-  state_t->depth = 128UL;
+  state_t->depth = fd_mcache_depth( mcache );
 }
 
 
@@ -130,7 +130,7 @@ typedef struct {
   char identity_key_base58[ FD_BASE58_ENCODED_32_SZ ];
   ulong next_leader_slot;
   ulong current_slot;
- 
+
   ulong bank_tile_cnt;
   ulong sock_tile_cnt;
   ulong quic_tile_cnt;
@@ -147,7 +147,7 @@ typedef struct {
 
     ulong my_total_slots;
     ulong my_skipped_slots;
-    
+
     ulong epoch_total_stake;
     ulong my_total_stake;
     fd_epoch_leaders_t * leader_sched;
@@ -158,7 +158,7 @@ typedef struct {
     ulong last_vote;
     ulong epoch_credits;
 
-    /* The vote credit data for last 32 slots. 
+    /* The vote credit data for last 32 slots.
        TODO: Change this to a better number. */
     ulong tvc_historical [ 32 ];
     int delinquent;
@@ -175,7 +175,7 @@ typedef struct {
    ulong gossip_peer_cnt;
    long last_poll_ns;
   } stats;
-  struct { 
+  struct {
    ulong net_total_rx_bytes;
    ulong net_total_tx_bytes;
    long last_poll_ns;
@@ -191,7 +191,7 @@ typedef struct {
     ulong cus_consumed_in_block;
   } pack;
   struct {
-    
+
    int page_number;
    int show_help;
 
@@ -199,7 +199,7 @@ typedef struct {
      monitor at the respective index is enabled or disabled. */
    int monitors;
    /* Ground zero plane is the std plane given by notcurses context,
-    * Base plane is plane the covers the whole screen and is above std plane but 
+    * Base plane is plane the covers the whole screen and is above std plane but
     * below all the other planes where the main widgets exist.*/
    struct ncplane* base_plane;
    int widget_y;

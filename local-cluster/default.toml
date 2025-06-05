@@ -36,7 +36,7 @@ name = "fd1"
 #
 # This means if running as sudo, the user will be the terminal user
 # which invoked sudo, not the root user.
-user = ""
+user = "fd-user"
 
 # Absolute directory path to place scratch files used during setup and
 # operation.  The ledger and accounts databases will also be placed in
@@ -290,7 +290,7 @@ dynamic_port_range = "8900-9000"
     # If nonzero, enable JSON RPC on this port, and use the next port
     # for the RPC websocket.  If zero, disable JSON RPC.  This option is
     # passed to the Agave client with the `--rpc-port` argument.
-    port = 0
+    port = 8999
 
     # If true, all RPC operations are enabled on this validator,
     # including non-default RPC methods for querying chain state and
@@ -484,7 +484,7 @@ dynamic_port_range = "8900-9000"
     # to ensure you can keep up with the network.  This option is passed
     # to the Agave client (inverted) with the
     # `--no-poh-speed-test` argument.
-    poh_speed_test = true
+    poh_speed_test = false 
 
     # If set, require the genesis block to have the given hash.  If it
     # does not the validator will abort with an error.  This option is
@@ -530,7 +530,7 @@ dynamic_port_range = "8900-9000"
     # this is not disabled, and the speed test fails, the validator will
     # refuse to start.  This option is passed to the Agave client
     # (inverted) with the `--no-os-network-limits-test` argument.
-    os_network_limits_test = true
+    os_network_limits_test = false 
 
     # If nonempty, add a hard fork at each of the provided slots.  These
     # options are passed to the Agave client with the
@@ -817,7 +817,7 @@ dynamic_port_range = "8900-9000"
     # The absolute path to a directory in the file system.  Firedancer
     # will mount the hugetlbfs file system for gigantic pages at a
     # subdirectory named .gigantic under this path, or if the entire
-    # path already exists, will use it as-is.  Firedancer will also
+    # path already exists, will use it as-is.  Firedancer will alsodefa
     # mount the hugetlbfs file system for huge pages at a subdirectory
     # named .huge under this path, or if the entire path already exists,
     # will use it as-is.  If the mount already exists it should be
@@ -968,12 +968,12 @@ dynamic_port_range = "8900-9000"
         # that are not over QUIC.  These could be votes, user
         # transactions, or transactions forwarded from another
         # validator.
-        regular_transaction_listen_port = 9001
+        regular_transaction_listen_port = 9101
 
         # Which port to listen on for incoming QUIC transactions.
         # Currently this must be exactly 6 more than the
         # transaction_listen_port.
-        quic_transaction_listen_port = 9007
+        quic_transaction_listen_port = 9107
 
         # Maximum number of simultaneous QUIC connections which can be
         # open.  New connections which would exceed this limit will not
@@ -1208,7 +1208,7 @@ dynamic_port_range = "8900-9000"
 
         # The port to listen on for HTTP request for Prometheus metrics.
         # Firedancer serves metrics at a URI like 127.0.0.1:7999/metrics
-        prometheus_listen_port = 7999
+        prometheus_listen_port = 7998
 
     # The gui tile receives data from the validator and serves an HTTP
     # endpoint to clients to view it.
@@ -1228,7 +1228,7 @@ dynamic_port_range = "8900-9000"
         gui_listen_address = "127.0.0.1"
 
         # The port to listen on.
-        gui_listen_port = 80
+        gui_listen_port = 5556
 
         # Maximum number of simultaneous HTTP connections which can be
         # open.  The server closes an HTTP connection after each
@@ -1266,7 +1266,7 @@ dynamic_port_range = "8900-9000"
     #
     # In development, you can disable the sandbox for testing and
     # debugging with the `--no-sandbox` argument to `fddev`.
-    sandbox = true
+    sandbox = false
 
     # As part of the security sandboxing, Firedancer will run every tile
     # in a separate process.  This can be annoying for debugging where
@@ -1371,14 +1371,14 @@ dynamic_port_range = "8900-9000"
         # MAC address of the first network namespace.
         interface0_mac = "52:F1:7E:DA:2C:E0"
         # IP address of the first network namespace.
-        interface0_addr = "198.18.0.1"
+        interface0_addr = "198.18.0.3"
 
         # Name of the second network namespace.
         interface1 = "veth_test_xdp_1"
         # MAC address of the second network namespace.
         interface1_mac = "52:F1:7E:DA:2C:E1"
         # IP address of the second network namespace.
-        interface1_addr = "198.18.0.2"
+        interface1_addr = "198.18.0.4"
 
     [development.gossip]
         # Under normal operating conditions, a validator should always
