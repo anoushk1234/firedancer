@@ -97,7 +97,7 @@ handle_input( void *arguments ){
   return NULL;
 }
 fdtop_plugin_state_t*
-fdtop_plugin_state_poll( fdtop_plugin_state_t* state_t ){
+fdtop_plugin_state_poll( fd_top_t* app, fdtop_plugin_state_t* state_t ){
   fd_frag_meta_t* mline = state_t->mcache + fd_mcache_line_idx( state_t->seq, state_t->depth );
   ulong seq_found = fd_frag_meta_seq_query( mline );
 
@@ -107,7 +107,6 @@ fdtop_plugin_state_poll( fdtop_plugin_state_t* state_t ){
 
   while( FD_LIKELY( fd_seq_eq( seq_found, state_t->seq ) ) ){
     void const* data = fd_chunk_to_laddr_const( state_t->base, mline->chunk );
-    /*ulong chunk = fd_laddr_to_chunk( state_t->base, data );*/
 
     ulong sig = mline->sig;
     ulong sz = mline->sz;
@@ -123,7 +122,7 @@ fdtop_plugin_state_poll( fdtop_plugin_state_t* state_t ){
       return state_t;
     }
 
-    fdtop_on_plugin_message( state_t->buf, sig, sz );
+    fdtop_on_plugin_message( app, state_t->buf, sig, sz );
 
     /* Wind up for next iteration */
     state_t->seq = fd_seq_inc( seq_found, 1UL );
@@ -137,26 +136,26 @@ fdtop_plugin_state_poll( fdtop_plugin_state_t* state_t ){
   return state_t;
 }
 void
-fdtop_on_plugin_message(uchar const *data, ulong sig, ulong sz){
+fdtop_on_plugin_message( fd_top_t* app, uchar const *data, ulong sig, ulong sz){
    (void)sz;
     ulong* msg;
-    ulong _slot = 0;
     ulong _parent_slot = 0;
     (void)_parent_slot;
     switch( sig ) {
     case FD_PLUGIN_MSG_SLOT_START:
        msg = (ulong*)(data);
-       _slot = msg[ 0 ];
        _parent_slot = msg[ 1 ];
+       app->current_slot = msg[ 0 ];
 #ifdef FD_DEBUG_MODE
-       /*FD_LOG_WARNING(( "Slot started slot=%lu parent_slot=%lu", _slot, _parent_slot ));*/
+       /*FD_LOG_WARNING(( "Slot started slot=%lu parent_slot=%lu", msg[ 0 ], _parent_slot ));*/
 #endif
        break;
     case FD_PLUGIN_MSG_SLOT_ROOTED:
         msg = (ulong*)(data);
-        _slot = msg[ 0 ];
+        /*_slot = msg[ 0 ];*/
+        app->rooted_slot = msg[ 0 ];
 #ifdef FD_DEBUG_MODE
-        FD_LOG_WARNING(( "Slot rooted  slot=%lu", _slot ));
+        FD_LOG_WARNING(( "Slot rooted  slot=%lu", msg[ 0 ] ));
 #endif
         break;
     default:
@@ -169,7 +168,7 @@ poll_metrics( void *arguments ){
 
   fd_topo_t * topo = args_p->topo;
   fd_top_t * app = args_p->app;
-  void* alloc_mem = args_p->alloc_mem;
+  void* alloc_mem = app->app_state.alloc_mem;
 
   app->sock_tile_cnt   = fd_topo_tile_name_cnt( topo, "sock"   );
   app->net_tile_cnt    = fd_topo_tile_name_cnt( topo, "net"    );
@@ -239,7 +238,7 @@ poll_metrics( void *arguments ){
                app->stats.net_total_tx_bytes += sock_metrics[ MIDX( COUNTER, SOCK, TX_BYTES_TOTAL ) ];
             }
 
-         if( !fdtop_plugin_state_poll( &state_t ) ){
+         if( !fdtop_plugin_state_poll( app, &state_t ) ){
             FD_LOG_WARNING(( "fdtop_plugin_state_poll NULL" ));
          };
           app->prev.last_poll_ns = app->stats.last_poll_ns;
@@ -320,22 +319,27 @@ fdtop_gossip( ring_buffer* gossip_msg_rx, struct ncplane* n, int* widget_y){
 }
 int
 fdtop_validator_stats( int* widget_y, struct ncplane* n, fd_top_t* app ){
+  void* alloc_mem = app->app_state.alloc_mem;
   unsigned dimy, dimx;
   ncplane_dim_yx( n, &dimy, &dimx);
-  unsigned int rows = ( dimy - MENU_BAR_Y ) / 4;
+  unsigned int rows = ( dimy - MENU_BAR_Y );
   unsigned int cols = dimx / 3;
   /*TODO: Change this to a heap hashmap data sturcture for cleaner control flow
    * map["bank"] = map<keys* [],values*[]>*/
-  char* bank_keys[3] = { "Transaction Success", "Ingress( kb/s )", "Egress( kb/s )" };
-  char* bank_values[4] = { NULL, NULL, NULL, NULL };
+  /* TODO:Make all these into constants*/
+  char* bank_keys[5] = { "Current Slot", "Rooted Slot", "Transaction Success", "Ingress( kb/s )", "Egress( kb/s )" };
+  char* bank_values[6] = { NULL, NULL, NULL, NULL, NULL, NULL };
 
-  for(ulong i = 0; i<3; i++){
-    bank_values[ i ] = malloc( 8 * sizeof(char));
+  for(ulong i = 0; i<5; i++){
+    char* data = &((char*)alloc_mem)[ FDTOP_RB_LEN*sizeof(int) + 8UL * i];
+    bank_values[ i ] = data;
   }
 
-  itoa( app->bank.txn_success_last, bank_values[ 0 ], 10 );
-  itoa( (ulong)((double)(app->stats.net_total_rx_bytes - app->prev.net_total_rx_bytes) * 1000000000.0 / (double)(app->stats.last_poll_ns - app->prev.last_poll_ns) ), bank_values[ 1 ], 10 );
-  itoa( (ulong)((double)(app->stats.net_total_tx_bytes - app->prev.net_total_tx_bytes) * 1000000000.0 / (double)(app->stats.last_poll_ns - app->prev.last_poll_ns) ), bank_values[ 2 ], 10 );
+  itoa( app->current_slot, bank_values[ 0 ], 10 );
+  itoa( app->rooted_slot, bank_values[ 1 ], 10 );
+  itoa( app->bank.txn_success_last, bank_values[ 2 ], 10 );
+  itoa( (ulong)((double)(app->stats.net_total_rx_bytes - app->prev.net_total_rx_bytes) * 1000000000.0 / (double)(app->stats.last_poll_ns - app->prev.last_poll_ns) ), bank_values[ 3 ], 10 );
+  itoa( (ulong)((double)(app->stats.net_total_tx_bytes - app->prev.net_total_tx_bytes) * 1000000000.0 / (double)(app->stats.last_poll_ns - app->prev.last_poll_ns) ), bank_values[ 4 ], 10 );
 
   char* quic_keys[1] = { "Active Connections" };
   char* quic_values[2] = { NULL, NULL };
@@ -343,9 +347,9 @@ fdtop_validator_stats( int* widget_y, struct ncplane* n, fd_top_t* app ){
   quic_values[0] = malloc(8 * sizeof(char));
   itoa( app->stats.quic_conn_cnt, quic_values[0], 10 );
 
-  fdtop_render_stats( n, "Validator Overview", rows, cols, *widget_y, (dimx / 3) + 2 , "1", bank_keys, bank_values);
-  *widget_y+= rows;
-  fdtop_render_stats( n, "Quic Stats", rows, cols, *widget_y, (dimx / 3) + 2, "2", quic_keys, quic_values );
+  fdtop_render_stats( n, "Validator Overview", rows / 3, cols, *widget_y, (dimx / 3) + 2 , "1", bank_keys, bank_values);
+  *widget_y+= rows / 3;
+  fdtop_render_stats( n, "Quic Stats", rows / 5, cols, *widget_y, (dimx / 3) + 2, "2", quic_keys, quic_values );
   *widget_y = MENU_BAR_Y;
   /*fdtop_render_stats( n, "Shred Stats", rows, cols - WIDGET_MARGIN, *widget_y, (dimx / 3) * 2 + 2, "3");*/
   /**widget_y += rows;*/
@@ -451,14 +455,15 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
   FD_LOG_WARNING(( "not debug mode" ));
   nc = notcurses_init(  &nopts, NULL );
   if( FD_UNLIKELY( NULL==nc ) ){
-        FD_LOG_ERR(( "notcurses_init() failed" ));
+        FD_LOG_ERR(( "notcurses_init()  failed" ));
   }
 #endif
 
  args_p.app = &app;
+ app.app_state.alloc_mem = alloc_mem;
  args_p.topo = &config->topo;
  args_p.nc = nc;
- args_p.alloc_mem = alloc_mem;
+ /*args_p.alloc_mem = alloc_mem;*/
 
 #ifdef FD_DEBUG_MODE
  poll_metrics( &args_p );

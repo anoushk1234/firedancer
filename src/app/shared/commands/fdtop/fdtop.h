@@ -93,34 +93,6 @@ rb_free( ring_buffer* rb ){
   free( rb->buffer );
 }
 
-typedef struct{
- fd_frag_meta_t* mcache;
- /*Base chunk in the cache line, points to the start of the workspace*/
- void* base;
- ulong depth;
- ulong seq;
- uchar buf[ 65536 ];
-} fdtop_plugin_state_t;
-
-inline void
-fdtop_plugin_state_init(
-    fdtop_plugin_state_t* state_t,
-    fd_frag_meta_t* mcache,
-    void* base
-    ){
-  state_t->base = base;
-  state_t->mcache = mcache;
-  state_t->seq = 0UL;
-  state_t->depth = fd_mcache_depth( mcache );
-}
-
-
-extern fdtop_plugin_state_t*
-fdtop_plugin_state_poll(
-    fdtop_plugin_state_t* state_t
-    );
-extern void
-fdtop_on_plugin_message( uchar const* data, ulong sig, ulong sz );
 
 /*TODO: Check if this is aligned by the compiler, if not align manually.*/
 typedef struct {
@@ -130,6 +102,7 @@ typedef struct {
   char identity_key_base58[ FD_BASE58_ENCODED_32_SZ ];
   ulong next_leader_slot;
   ulong current_slot;
+  ulong rooted_slot;
 
   ulong bank_tile_cnt;
   ulong sock_tile_cnt;
@@ -194,6 +167,11 @@ typedef struct {
 
    int page_number;
    int show_help;
+   /*Layout:
+    * [0..FDTOP_RB_FOOTPRINT*sizeof(int)] - Main page chart one ring buffer
+    * [0..8]
+    * */
+   void* alloc_mem;
 
    /* An integer where the first eight bits signify if the corresponding
      monitor at the respective index is enabled or disabled. */
@@ -226,5 +204,34 @@ void* handle_input( void *arguments );
 
 #define CHART_BUFFER_LEN 32
 
+typedef struct{
+ fd_frag_meta_t* mcache;
+ /*Base chunk in the cache line, points to the start of the workspace*/
+ void* base;
+ ulong depth;
+ ulong seq;
+ uchar buf[ 65536 ];
+} fdtop_plugin_state_t;
+
+inline void
+fdtop_plugin_state_init(
+    fdtop_plugin_state_t* state_t,
+    fd_frag_meta_t* mcache,
+    void* base
+    ){
+  state_t->base = base;
+  state_t->mcache = mcache;
+  state_t->seq = 0UL;
+  state_t->depth = fd_mcache_depth( mcache );
+}
+
+
+extern fdtop_plugin_state_t*
+fdtop_plugin_state_poll(
+    fd_top_t* app,
+    fdtop_plugin_state_t* state_t
+    );
+extern void
+fdtop_on_plugin_message( fd_top_t* app, uchar const* data, ulong sig, ulong sz );
 
 #endif /* HEADER_fd_src_app_shared_commands_fdtop_fdtop_h */
