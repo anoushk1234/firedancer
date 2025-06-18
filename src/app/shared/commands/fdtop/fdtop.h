@@ -6,7 +6,7 @@
 #include "../../../../util/log/fd_log.h"
 #include "../../../../tango/mcache/fd_mcache.h"
 #include "../../../../flamenco/leaders/fd_leaders.h"
-/*#include "menu.h"*/
+#include "../../../../disco/keyguard/fd_keyswitch.h"
 
 #define FD_BLACK 0x000000
 #define FD_WHITE 0xFFFFFF
@@ -98,7 +98,10 @@ rb_free( ring_buffer* rb ){
 typedef struct {
   long polling_rate_ms;
 
-  fd_pubkey_t identity_key;
+  /*fd_pubkey_t identity_key;*/
+  fd_keyswitch_t * keyswitch;
+  /*uchar identity_key[ 32UL ];*/
+  fd_pubkey_t identity_key[ 1 ];
   char identity_key_base58[ FD_BASE58_ENCODED_32_SZ ];
   ulong next_leader_slot;
   ulong current_slot;

@@ -1,10 +1,12 @@
 #include <notcurses/notcurses.h>
-#include <semaphore.h>
+/*#include <semaphore.h>*/
 #include <pthread.h>
 #include <locale.h>
 #include <errno.h>
 #include <stdint.h>
 #include <time.h>
+
+#include "../../../../disco/keyguard/fd_keyload.h"
 #include "../../../../disco/metrics/fd_metrics.h"
 #include "../../../../disco/topo/fd_topo.h"
 /*#include <cstdlib>*/
@@ -139,25 +141,22 @@ void
 fdtop_on_plugin_message( fd_top_t* app, uchar const *data, ulong sig, ulong sz){
    (void)sz;
     ulong* msg;
-    ulong _parent_slot = 0;
-    (void)_parent_slot;
     switch( sig ) {
     case FD_PLUGIN_MSG_SLOT_START:
        msg = (ulong*)(data);
-       _parent_slot = msg[ 1 ];
        app->current_slot = msg[ 0 ];
-#ifdef FD_DEBUG_MODE
-       /*FD_LOG_WARNING(( "Slot started slot=%lu parent_slot=%lu", msg[ 0 ], _parent_slot ));*/
+#ifndef FD_DEBUG_MODE
+       /*FD_LOG_WARNING(( "Slot started slot=%lu parent_slot=%lu", msg[ 0 ], msg[ 1 ] ));*/
 #endif
        break;
     case FD_PLUGIN_MSG_SLOT_ROOTED:
         msg = (ulong*)(data);
-        /*_slot = msg[ 0 ];*/
         app->rooted_slot = msg[ 0 ];
-#ifdef FD_DEBUG_MODE
+#ifndef FD_DEBUG_MODE
         FD_LOG_WARNING(( "Slot rooted  slot=%lu", msg[ 0 ] ));
 #endif
         break;
+      /*case */
     default:
         break;
     }
@@ -189,6 +188,12 @@ poll_metrics( void *arguments ){
     long duration = (fd_log_wallclock()-app->stats.last_poll_ns);
 
     if( duration >= (long)((long)app->polling_rate_ms * 1000000L) ){
+/*FD_LOG_WARNING(( "pubkey: %s", app->identity_key_base58 ));*/
+        if( FD_UNLIKELY( fd_keyswitch_state_query( app->keyswitch )==FD_KEYSWITCH_STATE_COMPLETED ) ){
+          fd_memcpy( app->identity_key->uc, app->keyswitch->bytes, 32UL );  
+          fd_base58_encode_32( app->keyswitch->bytes, NULL, app->identity_key_base58 );
+          app->identity_key_base58[ FD_BASE58_ENCODED_32_SZ-1UL ] = '\0';
+        }
           for( ulong i = 0UL; i<app->bank_tile_cnt; i++ ){
                 fd_topo_tile_t const * bank = &topo->tiles[ fd_topo_find_tile( topo, "bank", i ) ];
                 volatile ulong const * bank_metrics = fd_metrics_tile( bank->metrics );
@@ -410,62 +415,56 @@ fdtop_cmd_fn( args_t * args FD_PARAM_UNUSED,
    FD_LOG_ERR(( "sigaction(SIGTERM) failed (%i-%s)", errno, fd_io_strerror( errno ) ));
  }
 
- sem_t metrics_sem;
- sem_t display_sem;
 
- if( FD_UNLIKELY( -1==sem_init( &metrics_sem, 0, 0 ) ) ){
-   FD_LOG_ERR(( "sem_init(metrics_sem) failed (%i-%s)", errno, fd_io_strerror( errno ) ));
- }
-
- if( FD_UNLIKELY( -1==sem_init( &display_sem, 0, 0 ) ) ){
-   FD_LOG_ERR(( "sem_init(display_sem) lfailed (%i-%s)", errno, fd_io_strerror( errno ) ));
- }
-
-
- thread_args args_p;
 
  fd_topo_join_workspaces( &config->topo, FD_SHMEM_JOIN_MODE_READ_ONLY );
  fd_topo_fill( &config->topo );
 
 
- fd_top_t app;
- memset( &app, 0, sizeof(app) );
+ fd_top_t app = { 0 };
  app.polling_rate_ms = args->fdtop.polling_rate_ms;
+ 
+ fd_memcpy( app.identity_key, fd_keyload_load( config->consensus.identity_path, 1 ), sizeof(fd_pubkey_t) );
+ fd_memcpy( app.identity_key_base58, FD_BASE58_ENC_32_ALLOCA( app.identity_key ), FD_BASE58_ENCODED_32_SZ );
+ fd_topo_tile_t* gui_tile = &config->topo.tiles[ fd_topo_find_tile( &config->topo, "gui", 0 ) ];
+ app.keyswitch = fd_keyswitch_join( fd_topo_obj_laddr( &config->topo, gui_tile->keyswitch_obj_id ) );
 
-  ulong cpu_id = fd_log_cpu_id();
-  ulong page_cnt = 1UL;
-  fd_wksp_t*  wksp  = fd_wksp_new_anon( "fdtop", fd_cstr_to_shmem_page_sz( "huge" ), 1UL, &page_cnt, &cpu_id,0 ,0 );
+
+ ulong cpu_id = fd_log_cpu_id();
+ ulong page_cnt = 1UL;
+ fd_wksp_t*  wksp  = fd_wksp_new_anon( "fdtop", fd_cstr_to_shmem_page_sz( "huge" ), 1UL, &page_cnt, &cpu_id,0 ,0 );
  fd_alloc_t* alloc = fd_alloc_join( fd_alloc_new( fd_wksp_alloc_laddr( wksp, fd_alloc_align(), fd_alloc_footprint(), 3 ), 3 ), 0 );
  ulong footprint = rb_footprint( FDTOP_RB_LEN, sizeof(int) );
  ulong max = 0;
-/*TODO: should we handle the error if malloc fails?*/
+ /*TODO: should we handle the error if malloc fails?*/
  void* alloc_mem = fd_alloc_malloc_at_least( alloc, 0, footprint, &max );
+ app.app_state.alloc_mem = alloc_mem;
+
 
 
  if( FD_UNLIKELY( NULL==setlocale( LC_ALL, "" ) ) ){
         FD_LOG_ERR(( "setlocale( LC_ALL ) failed" ));
   }
   struct notcurses* nc;
-  notcurses_options nopts = { 0 };
-#ifdef FD_DEBUG_MODE
+#ifndef FD_DEBUG_MODE
   FD_LOG_WARNING(( "debug mode" ));
   nc = NULL;
-  (void)nopts;
 #else
   FD_LOG_WARNING(( "not debug mode" ));
+  notcurses_options nopts = { 0 };
   nc = notcurses_init(  &nopts, NULL );
   if( FD_UNLIKELY( NULL==nc ) ){
         FD_LOG_ERR(( "notcurses_init()  failed" ));
   }
 #endif
 
+ thread_args args_p;
  args_p.app = &app;
- app.app_state.alloc_mem = alloc_mem;
  args_p.topo = &config->topo;
  args_p.nc = nc;
  /*args_p.alloc_mem = alloc_mem;*/
 
-#ifdef FD_DEBUG_MODE
+#ifndef FD_DEBUG_MODE
  poll_metrics( &args_p );
 #else
  pthread_t t1;

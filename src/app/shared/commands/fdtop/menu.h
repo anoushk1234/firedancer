@@ -38,7 +38,7 @@ fdtop_menu_bar_color_scheme( void ){
 }
 
 int
-fdtop_menu_bar_create( struct ncplane* n, unsigned xlen, int page_number );
+fdtop_menu_bar_create( struct ncplane* n, unsigned xlen, int page_number, const uchar * identity_key_base58 );
 
 FD_FN_CONST static inline ulong
 next_page( fd_top_t const *app ){

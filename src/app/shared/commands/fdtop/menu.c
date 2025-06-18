@@ -83,14 +83,14 @@ fdtop_menu_create( struct notcurses* nc, fd_top_t *app ){
   fdtop_menu_bg_color_scheme( base_plane );
  
   fdtop_menu_refresh( base_plane, ylen, xlen );
-  fdtop_menu_bar_create( base_plane, xlen, app->app_state.page_number );
+  fdtop_menu_bar_create( base_plane, xlen, app->app_state.page_number, (const uchar*)&app->identity_key_base58[0] );
   /*app->app_state.widget_y += MENU_BAR_Y;*/
   return 0; 
 }
 
 #include <wchar.h>
 
-int fdtop_menu_bar_create( struct ncplane *one_plane , unsigned xlen, int page_number ){
+int fdtop_menu_bar_create( struct ncplane *one_plane , unsigned xlen, int page_number, const uchar * identity_key_base58 ){
   /*struct ncplane *one_plane = ncplane_dup( zero_plane, NULL );*/
   /*ncplane_erase( one_plane );*/
 
@@ -144,6 +144,23 @@ int fdtop_menu_bar_create( struct ncplane *one_plane , unsigned xlen, int page_n
     }
 
     title_x+=sizeof(menu_items[ idx ]);
+  }
+  title_x = (int)(oldx - 45U - 2U);
+  while( *identity_key_base58 ){
+    nccell key_cell = NCCELL_TRIVIAL_INITIALIZER;
+
+      nccell_prime( 
+          one_plane, 
+          &key_cell, 
+          (char*)identity_key_base58, 
+          0, 
+          nc_channels_init( FD_WHITE, FD_MINT, NCALPHA_OPAQUE, NCALPHA_OPAQUE ) 
+          );
+      
+      ncplane_putc_yx( one_plane, title_y, title_x, &key_cell );
+
+      identity_key_base58++;
+      title_x++;
   }
   return 0;
 }
